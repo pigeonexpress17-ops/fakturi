@@ -114,6 +114,22 @@ button.sum .val{color:var(--accent)}
 .seg button[aria-pressed="true"].m{background:var(--accent-soft);color:var(--accent)}
 .mtag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:4px}
 button.sum{cursor:pointer}
+.perbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.perbar label{font-weight:600}
+.summary.kasa{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.kgrid{grid-template-columns:1fr}}
+.kbox{border:1px solid var(--line);border-radius:var(--r);background:var(--paper);padding:14px 16px;min-width:0}
+.kbox h3{margin:0 0 4px;font-size:15px}
+.kbal{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.kstats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:8px 0;font-size:13px}
+.kstats b{font-variant-numeric:tabular-nums}
+.kform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0;padding:10px;border:1px dashed var(--line-strong);border-radius:8px}
+.kform .full{grid-column:1/-1}
+.krow{display:grid;grid-template-columns:78px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.krow .a{font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.krow .plus{color:var(--paid)} .krow .minus{color:var(--unpaid)}
+.krow button{border:0;background:transparent;color:var(--muted);padding:2px 6px}
 .cat{display:inline-block;font-size:12px;padding:1px 7px;border-radius:4px;background:var(--accent-soft);color:var(--accent);font-weight:500;margin-right:6px}
 .tp{color:var(--paid)} .tu{color:var(--unpaid)} .ta{color:var(--accent)}
 .empty{padding:36px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center}
@@ -185,6 +201,8 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
 
   <div class="notice" id="notice" hidden></div>
 
+  <div class="perbar" id="perBar" hidden><label for="perSel">Период</label><select id="perSel" aria-label="Период"></select><span class="hint" id="perHint"></span></div>
+
   <section class="summary" id="summary" hidden>
     <button class="sum" type="button" data-sf="unpaid|Банка"><span class="lbl"><i style="background:var(--unpaid)"></i>Неплатени — банка</span><span class="val" id="sUB">—</span><span class="cnt" id="cUB"></span></button>
     <button class="sum" type="button" data-sf="unpaid|Кеш"><span class="lbl"><i style="background:var(--unpaid)"></i>Неплатени — кеш</span><span class="val" id="sUK">—</span><span class="cnt" id="cUK"></span></button>
@@ -192,6 +210,10 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
     <button class="sum" type="button" data-sf="paid|Банка"><span class="lbl"><i style="background:var(--paid)"></i>Платени — банка</span><span class="val" id="sPB">—</span><span class="cnt" id="cPB"></span></button>
     <button class="sum" type="button" data-sf="paid|Кеш"><span class="lbl"><i style="background:var(--paid)"></i>Платени — кеш</span><span class="val" id="sPK">—</span><span class="cnt" id="cPK"></span></button>
     <button class="sum" type="button" id="oweCard"><span class="lbl"><i style="background:var(--accent)"></i>Дължиш на хора</span><span class="val" id="sO">—</span><span class="cnt" id="cO"></span></button>
+  </section>
+  <section class="summary kasa" id="kasaSum" hidden>
+    <button class="sum" type="button" data-kasa="Банка"><span class="lbl"><i style="background:var(--ink)"></i>Каса — банка</span><span class="val" id="kB">—</span><span class="cnt" id="kBc"></span></button>
+    <button class="sum" type="button" data-kasa="Кеш"><span class="lbl"><i style="background:var(--ink)"></i>Каса — кеш</span><span class="val" id="kK">—</span><span class="cnt" id="kKc"></span></button>
   </section>
 
   <section class="card" id="upCard" hidden>
@@ -218,6 +240,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
     <button class="tab" data-v="list" role="tab" aria-selected="false" type="button">Регистър</button>
     <button class="tab" data-v="cats" role="tab" aria-selected="false" type="button">По разходи</button>
     <button class="tab" data-v="owe" role="tab" aria-selected="false" type="button">Дължими на хора</button>
+    <button class="tab" data-v="kasa" role="tab" aria-selected="false" type="button">Каса</button>
   </nav>
 
   <div class="toolbar" id="toolbar" hidden>
@@ -347,7 +370,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 
   // ---------- data ----------
   function apply(d) {
-    Object.assign(S, { me: d.me, cats: d.cats, ai: d.ai, aiError: d.aiError || "", accountant: !!d.accountant, pending: d.pending || [], register: d.register || [], mine: d.mine || [], people: d.people || [] });
+    Object.assign(S, { me: d.me, cats: d.cats, ai: d.ai, aiError: d.aiError || "", accountant: !!d.accountant, pending: d.pending || [], register: d.register || [], mine: d.mine || [], people: d.people || [], kasa: d.kasa || [] });
     dupIndex = null;
   }
   async function load(quiet, force) {
@@ -384,7 +407,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       : seesAll() ? "Виждаш всички фактури и качваш нови. Одобрява администраторът."
       : "Снимай фактурата и я изпрати. Администраторът ще я прегледа и одобри.";
     $("#upCard").hidden = false; $("#refreshBtn").hidden = false;
-    $("#summary").hidden = $("#tabs").hidden = !seesAll();
+    $("#summary").hidden = $("#tabs").hidden = $("#perBar").hidden = $("#kasaSum").hidden = !seesAll();
     $("#exportBtn").hidden = !seesAll();
     $("#pkgBtn").hidden = !isAdmin(); $("#bankBtn").hidden = !isAdmin();
     $("#upP").textContent = isAdmin() ? "Платена" : "Платих я аз";
@@ -446,7 +469,8 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     if (!S.me) return;
     if (!seesAll()) { $("#toolbar").hidden = true; return renderMine(); }
     const A = { UB: [0, 0], UK: [0, 0], PB: [0, 0], PK: [0, 0], X: [0, 0, 0] };
-    S.register.forEach(o => { const k = methodOf(o) === "Кеш" ? "K" : "B";
+    const inPer = o => !S.month || String(o.date || o.uploadedAt).slice(0, 7) === S.month;
+    S.register.filter(inPer).forEach(o => { const k = methodOf(o) === "Кеш" ? "K" : "B";
       if (isPaid(o)) { A["P" + k][0] += eur(o); A["P" + k][1]++; }
       else if (isPart(o)) { A.X[0] += dueE(o); A.X[1]++; A.X[2] += paidE(o); }
       else { A["U" + k][0] += eur(o); A["U" + k][1]++; } });
@@ -457,16 +481,21 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     $("#cO").textContent = names.length ? (names.length === 1 ? "на 1 човек" : "на " + names.length + " души") : "никой не чака пари";
     $("#qBadge").textContent = S.pending.length; $("#qBadge").hidden = !S.pending.length;
 
-    const months = [...new Set(S.register.map(o => String(o.date || o.uploadedAt).slice(0, 7)).filter(Boolean))].sort().reverse();
+    const months = [...new Set(S.register.map(o => String(o.date || o.uploadedAt).slice(0, 7)).concat((S.kasa || []).map(x => String(x.date).slice(0, 7)), [todayISO().slice(0, 7)]).filter(Boolean))].sort().reverse();
     $("#monthSel").innerHTML = '<option value="">Всички месеци</option>' + months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join("");
     $("#monthSel").value = months.includes(S.month) ? S.month : ""; S.month = $("#monthSel").value;
+    $("#perSel").innerHTML = '<option value="">Всичко до днес</option>' + months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join("");
+    $("#perSel").value = S.month;
+    $("#perHint").textContent = S.month ? "Фактурите са по дата на фактурата, касата — по дата на плащане." : "";
+    ["Банка", "Кеш"].forEach(k => { const st = kasaStats(k); const id = k === "Кеш" ? "kK" : "kB";
+      $("#" + id).textContent = money(st.end); $("#" + id + "c").textContent = S.month ? `постъпления ${money(st.in)} · плащания ${money(-st.out)}` : (st.op ? "от " + fmtDate(st.op.date) + " · натисни за движенията" : "няма начално салдо · натисни, за да въведеш"); });
     const used = [...new Set(S.register.map(o => o.category || "Други"))];
     $("#catSel").innerHTML = '<option value="">Всички разходи</option>' + used.map(c => `<option>${esc(c)}</option>`).join("");
     $("#catSel").value = used.includes(S.cat) ? S.cat : ""; S.cat = $("#catSel").value;
 
     document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t.dataset.v === S.view));
     $("#toolbar").hidden = !(S.view === "list" || S.view === "cats");
-    ({ queue: renderQueue, list: renderList, cats: renderCats, owe: renderOwe })[S.view]();
+    ({ queue: renderQueue, list: renderList, cats: renderCats, owe: renderOwe, kasa: renderKasa })[S.view]();
   }
 
   const payTag = o => isPart(o) ? `<small class="tu">Частично: платени ${money(paidE(o))}</small>` : isPaid(o) ? (o.paidBy && !isAdmin() && S.me.name === o.paidBy ? '<small class="tp">Платих я аз</small>' : `<small class="tp">Платена${o.paidBy ? " от " + esc(o.paidBy) : ""}</small>`) : '<small class="tu">Неплатена</small>';
@@ -511,6 +540,69 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       arr.map(([c, o]) => `<div class="bar" data-cat="${esc(c)}" style="cursor:pointer"><span class="nm">${esc(c)}<small>${plural(o.n)} · ${tot ? Math.round((o.p + o.u) / tot * 100) : 0}%</small></span><span class="track"><span class="fp" style="width:${o.p / max * 100}%"></span><span class="fu" style="width:${o.u / max * 100}%"></span></span><span class="v">${money(r2(o.p + o.u))}</span></div>`).join("") +
       `<div class="foot"><span>Общо разходи</span><b class="num">${money(r2(tot))}</b></div>`;
   }
+
+  // ---------- каса ----------
+  function ledger(k) {
+    const e = [];
+    (S.kasa || []).filter(x => x.reg === k).forEach(x => e.push({ date: x.date, amt: +x.amount || 0, label: x.type + (x.note ? " — " + x.note : ""), kid: x.id, type: x.type }));
+    S.register.forEach(o => {
+      if (o.paidBy) { if (k === "Кеш" && o.reimbursed === "Да") e.push({ date: o.reimbursedAt || o.paidDate || o.date, amt: -eur(o), label: "Върнати на " + o.paidBy + " · " + (o.supplier || "фактура"), rid: o.id }); return; }
+      if (methodOf(o) !== k) return;
+      const p = paidE(o); if (p > 0) e.push({ date: o.paidDate || o.date || o.uploadedAt, amt: -p, label: (o.supplier || "Фактура") + (o.number ? " № " + o.number : "") + (isPart(o) ? " (частично)" : ""), rid: o.id });
+    });
+    const op = e.filter(x => x.type === "Начално салдо").sort((a, b) => String(a.date).localeCompare(String(b.date))).pop();
+    const list = (op ? e.filter(x => x === op || (x.type !== "Начално салдо" && String(x.date) >= String(op.date))) : e)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || (a.type === "Начално салдо" ? -1 : b.type === "Начално салдо" ? 1 : 0));
+    return { list, op };
+  }
+  function kasaStats(k) {
+    const { list, op } = ledger(k), m = S.month;
+    const R = a => r2(a.reduce((s, x) => s + x.amt, 0));
+    const isOp = x => x.type === "Начално салдо";
+    if (!m) return { op, start: op ? op.amt : 0, in: R(list.filter(x => x.amt > 0 && !isOp(x))), out: R(list.filter(x => x.amt < 0)), end: R(list), rows: list.slice(-40).reverse() };
+    const before = list.filter(x => String(x.date) < m + "-01"), cur = list.filter(x => String(x.date).slice(0, 7) === m);
+    const start = r2(R(before) + R(cur.filter(isOp))), inn = R(cur.filter(x => x.amt > 0 && !isOp(x))), out = R(cur.filter(x => x.amt < 0));
+    return { op, start, in: inn, out, end: r2(start + inn + out), rows: cur.slice().reverse() };
+  }
+  S.kform = null;
+  function renderKasa() {
+    const v = $("#view");
+    v.innerHTML = `<div class="kgrid">${["Банка", "Кеш"].map(k => { const st = kasaStats(k), f = S.kform === k;
+      return `<div class="kbox"><h3>Каса — ${k.toLowerCase()}</h3>
+        <div class="kbal">${money(st.end)}</div><div class="hint">${S.month ? "в края на " + monthLabel(S.month) : "текущ баланс"}${st.op ? " · начално салдо от " + fmtDate(st.op.date) : " · няма начално салдо"}</div>
+        <div class="kstats"><span>${S.month ? "В началото на месеца" : "Начално салдо"}</span><b>${money(st.start)}</b><span>Постъпления</span><b class="tp">${money(st.in)}</b><span>Плащания</span><b class="tu">${money(-st.out)}</b></div>
+        ${isAdmin() ? (f ? `<div class="kform" data-kf="${k}">
+            <div class="fld full"><label>Вид</label><select id="kfType"><option>Внасяне</option><option>Теглене</option><option value="Прехвърляне">Прехвърляне към ${k === "Кеш" ? "банка" : "кеш"}</option><option>Начално салдо</option></select></div>
+            <div class="fld"><label>Сума (€)</label><input id="kfAmt" class="r" inputmode="decimal"></div>
+            <div class="fld"><label>Дата</label><input id="kfDate" type="date" value="${todayISO()}"></div>
+            <div class="fld full"><label>Бележка</label><input id="kfNote" placeholder="напр. внесени от оборота"></div>
+            <div class="actions full"><button type="button" class="btn" data-kcancel>Отказ</button><button type="button" class="btn primary" data-ksave="${k}">Запиши</button></div>
+          </div>` : `<div class="actions" style="margin:8px 0"><button type="button" class="btn" data-kopen="${k}">+ Движение</button></div>`) : ""}
+        ${st.rows.length ? st.rows.map(x => `<div class="krow"><span class="hint">${fmtDate(x.date)}</span><span>${esc(x.label)}</span><span class="a ${x.amt >= 0 ? "plus" : "minus"}">${x.amt >= 0 ? "+" : "−"}${money(Math.abs(x.amt))}</span>${isAdmin() && x.kid ? `<button type="button" data-kdel="${esc(x.kid)}" title="Изтрий движението">✕</button>` : "<span></span>"}</div>`).join("") : '<div class="hint" style="padding:8px 0">Няма движения за този период.</div>'}
+      </div>`; }).join("")}</div>
+      <p class="hint" style="margin-top:10px">Платените фактури се вадят от касата според начина на плащане (банка или кеш) и датата на плащане. Въведи „Начално салдо“ — колко има в касата към дадена дата; плащанията преди нея не се броят. Парите, върнати на колеги за платени от тях фактури, се вадят от кеша.</p>`;
+  }
+  $("#view").addEventListener("click", async e => {
+    const o = e.target.closest("[data-kopen]"); if (o) { S.kform = o.dataset.kopen; renderKasa(); setTimeout(() => $("#kfAmt") && $("#kfAmt").focus(), 50); return; }
+    if (e.target.closest("[data-kcancel]")) { S.kform = null; renderKasa(); return; }
+    const sv = e.target.closest("[data-ksave]");
+    if (sv) {
+      const f = { reg: sv.dataset.ksave, type: $("#kfType").value, amount: parseNum($("#kfAmt").value), date: $("#kfDate").value, note: $("#kfNote").value };
+      if (f.type !== "Начално салдо" && !f.amount) return toast("Въведи сума.");
+      sv.disabled = true; sv.textContent = "Записвам…";
+      try { const r = await api("apiKasaAdd", f); S.kasa = r.kasa; S.kform = null; render(); toast("Записано в касата"); }
+      catch (err) { toast(errMsg(err)); sv.disabled = false; sv.textContent = "Запиши"; }
+      return;
+    }
+    const d = e.target.closest("[data-kdel]");
+    if (d) {
+      if (!d.dataset.armed) { d.dataset.armed = "1"; d.textContent = "Изтрий?"; return; }
+      d.disabled = true;
+      try { const r = await api("apiKasaDelete", d.dataset.kdel); S.kasa = r.kasa; render(); toast("Движението е изтрито"); } catch (err) { toast(errMsg(err)); d.disabled = false; }
+    }
+  });
+  document.querySelectorAll(".sum[data-kasa]").forEach(c => c.onclick = () => { S.view = "kasa"; render(); $("#tabs").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  $("#perSel").onchange = e => { S.month = e.target.value; render(); };
 
   function renderOwe() {
     const v = $("#view"), om = owedMap(), names = Object.keys(om).sort((a, b) => om[b].sum - om[a].sum);
