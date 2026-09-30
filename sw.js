@@ -1,6 +1,6 @@
 // Пази приложението на телефона, за да се отваря и без интернет.
 // Самата страница винаги се взима първо от мрежата (за да идват обновленията).
-const CACHE = 'fakturi-v2';
+const CACHE = 'fakturi-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {})); });
 self.addEventListener('activate', e => e.waitUntil(

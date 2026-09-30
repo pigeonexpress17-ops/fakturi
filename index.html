@@ -176,7 +176,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
 <div class="wrap">
   <header>
     <div><h1>Регистър фактури</h1><p class="sub" id="subLine">Зареждам…</p></div>
-    <div class="actions"><span class="pill" id="rolePill" hidden></span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn" id="pkgBtn" type="button" hidden title="Изпраща Excel и файловете за избрания месец (или миналия) на счетоводителя">Към счетоводителя</button><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
+    <div class="actions"><span class="pill" id="rolePill" hidden></span><span class="pill" id="syncDot" hidden>Записвам…</span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn" id="pkgBtn" type="button" hidden title="Изпраща Excel и файловете за избрания месец (или миналия) на счетоводителя">Към счетоводителя</button><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
   </header>
 
   <div class="notice" id="notice" hidden></div>
@@ -305,12 +305,33 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   };
   const errMsg = e => (e && e.message ? e.message : "Нещо се обърка.").replace(/^Error:\s*/, "").replace(/^Exception:\s*/, "");
 
+  // ---------- моментални действия: екранът се сменя веднага, записът върви отзад, по ред ----------
+  let actQ = Promise.resolve(), actN = 0, syncT;
+  const setSync = () => { $("#syncDot").hidden = !actN; };
+  function act(label, fn) {
+    actN++; clearTimeout(syncT); setSync();
+    actQ = actQ.then(async () => {
+      try {
+        for (let t = 0; ; t++) {
+          try { await fn(); break; }
+          catch (e) { if (!e.retry || t >= 4) throw e; await new Promise(z => setTimeout(z, 2000 * (t + 1))); }
+        }
+      } catch (e) { toast(label + ": " + errMsg(e) + " Връщам последното записано състояние."); actN--; setSync(); await load(true, true); actN++; }
+      finally { actN--; setSync(); if (!actN) syncT = setTimeout(() => load(true), 20000); }
+    });
+    return actQ;
+  }
+  const putList = (list, o) => { const i = S[list].findIndex(x => x.id === o.id); if (i >= 0) S[list][i] = o; else S[list].unshift(o); };
+  const dropList = (list, id) => { S[list] = S[list].filter(x => x.id !== id); };
+  const changed = () => { dupIndex = null; render(); };
+
   // ---------- data ----------
   function apply(d) {
     Object.assign(S, { me: d.me, cats: d.cats, ai: d.ai, aiError: d.aiError || "", accountant: !!d.accountant, pending: d.pending || [], register: d.register || [], mine: d.mine || [], people: d.people || [] });
     dupIndex = null;
   }
-  async function load(quiet) {
+  async function load(quiet, force) {
+    if (quiet && actN && !force) return;
     try {
       const d = await api("apiInit");
       apply(d);
@@ -320,6 +341,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       if (isAdmin() && S.aiError) notice("Claude не разчита фактурите: " + S.aiError + " Провери ключа в таблицата (лист „Настройки“, клетка B5).");
       render();
       flushOutbox();
+      if (seesAll() && !S.pre) { S.pre = 1; setTimeout(() => { loadPdf(); prefetch(S.pending.slice(0, 2).map(x => x.id)); }, 1500); }
     } catch (e) {
       if (e.retry && !S.me) {
         let c = null; try { c = JSON.parse(localStorage.getItem("fakturi_cache") || "null"); } catch (x) {}
@@ -330,6 +352,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
           return;
         }
       }
+      if (!e.retry && /Невалиден линк/.test(errMsg(e))) { try { localStorage.removeItem("fakturi_cache"); } catch (x) {} S.me = null; $("#view").innerHTML = ""; ["#summary", "#tabs", "#upCard", "#exportBtn", "#pkgBtn", "#rolePill"].forEach(q => { const el = $(q); if (el) el.hidden = true; }); }
       if (!S.me) { notice(errMsg(e)); $("#subLine").textContent = ""; } else if (!quiet) toast(errMsg(e));
     }
   }
@@ -516,8 +539,11 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     if (pay) {
       const n = pay.dataset.pay;
       if (!armed.has(n)) { armed.add(n); pay.textContent = "Потвърди изплащането"; pay.classList.add("primary"); return; }
-      armed.delete(n); pay.disabled = true; pay.textContent = "Записвам…";
-      try { const r = await api("apiReimburse", n); toast(`Отбелязано: върнати ${money(r.sum)} на ${n}`); await load(true); } catch (err) { toast(errMsg(err)); pay.disabled = false; }
+      armed.delete(n);
+      let sum = 0; const today = todayISO();
+      S.register = S.register.map(o => { if (o.paidBy === n && o.reimbursed !== "Да") { sum += eur(o); return Object.assign({}, o, { reimbursed: "Да", reimbursedAt: today }); } return o; });
+      changed(); toast(`Отбелязано: върнати ${money(r2(sum))} на ${n}`);
+      act("Изплащането не се записа", () => api("apiReimburse", n));
       return;
     }
     const b = e.target.closest("[data-cat]"); if (b) { S.cat = b.dataset.cat; S.view = "list"; render(); return; }
@@ -681,11 +707,41 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     pdfReady = add(base + "pdf.worker.min.js").then(() => add(base + "pdf.min.js")).then(() => { pdfjsLib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.js"; return pdfjsLib; });
     pdfReady.catch(() => pdfReady = null); return pdfReady;
   }
+  // Файловете се пазят на телефона: отворена веднъж, фактурата се показва веднага
+  const FC = (() => {
+    let p = null; const mem = new Map(), LS = "fakturi_fc", MAX = 80;
+    const open = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open("fakturi_files", 1); r.onupgradeneeded = () => r.result.createObjectStore("f", { keyPath: "id" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("f", mode); const rq = fn(t.objectStore("f")); t.oncomplete = () => res(rq ? rq.result : undefined); t.onerror = () => rej(t.error); }); };
+    const order = () => { try { return JSON.parse(localStorage.getItem(LS) || "[]"); } catch (e) { return []; } };
+    return {
+      get: async id => { if (mem.has(id)) return mem.get(id); try { const v = await tx("readonly", st => st.get(id)); if (v) mem.set(id, v); return v || null; } catch (e) { return null; } },
+      put: async v => {
+        mem.set(v.id, v); if (mem.size > 25) mem.delete(mem.keys().next().value);
+        try {
+          await tx("readwrite", st => st.put(v));
+          const ids = order().filter(x => x !== v.id); ids.push(v.id);
+          const old = ids.splice(0, Math.max(0, ids.length - MAX));
+          if (old.length) await tx("readwrite", st => { old.forEach(x => st.delete(x)); });
+          localStorage.setItem(LS, JSON.stringify(ids));
+        } catch (e) {}
+      }
+    };
+  })();
+  const inflight = new Map();
+  function getFile(id) {
+    if (inflight.has(id)) return inflight.get(id);
+    const pr = (async () => { const c = await FC.get(id); if (c) return c; const f = await api("apiFile", id); const v = { id, type: f.type, b64: f.b64 }; FC.put(v); return v; })();
+    inflight.set(id, pr); pr.then(() => inflight.delete(id), () => inflight.delete(id));
+    return pr;
+  }
+  let prefT;
+  function prefetch(ids) { clearTimeout(prefT); prefT = setTimeout(async () => { for (const id of ids) { try { await getFile(id); } catch (e) { break; } } }, 600); }
+
   async function preview(id) {
     const tok = ++pvTok, box = $("#dFile");
     box.innerHTML = `<div class="preview"><div class="ld">Зареждам файла…</div></div>`;
     try {
-      const f = await api("apiFile", id); if (tok !== pvTok) return;
+      const f = await getFile(id); if (tok !== pvTok) return;
       const pv = box.querySelector(".preview");
       if (f.type !== "application/pdf") { pv.innerHTML = `<img alt="Фактура" src="data:${f.type};base64,${f.b64}">`; return; }
       const bin = atob(f.b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
@@ -775,6 +831,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     $("#dHist").innerHTML = '<details class="hist" id="histD"><summary>История на промените</summary><div id="histBox"></div></details>';
     $("#histD").addEventListener("toggle", () => { const box = $("#histBox"); if ($("#histD").open && !box.dataset.done) { box.dataset.done = "1"; loadHist(o.id, box); } });
     preview(o.id);
+    if (kind === "pending") { const i = S.pending.findIndex(x => x.id === o.id); prefetch(S.pending.slice(i + 1, i + 3).map(x => x.id)); if (seesAll()) loadPdf(); }
 
     if (kind === "pending") {
       fill(o, isAdmin());
@@ -784,7 +841,11 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
           const ok = $("#okBtn"), f = readForm(), d = dupsOf(Object.assign({}, o, f));
           if (d.length && !ok.dataset.armed) { ok.dataset.armed = "1"; ok.textContent = "Одобри въпреки дубликата"; ok.classList.add("danger-solid"); toast("Внимание: прилича на вече качена фактура. Провери отгоре."); return; }
           if (d.length) f.dupNote = true;
-          run(ok, "Одобрявам…", async () => { await api("apiApprove", o.id, f); close(); toast("Одобрена — вече е в регистъра"); await load(true); });
+          if (f.total == null) return toast("Въведи сумата, преди да одобриш.");
+          const upd = Object.assign({}, o, f, { status: "Одобрена" }); delete upd.dupNote; delete upd.totalEur;
+          if (upd.payment === "Платена") { upd.paidDate = upd.paidDate || todayISO(); if (upd.paidBy) upd.reimbursed = upd.reimbursed || "Не"; } else { upd.paidBy = ""; upd.reimbursed = ""; }
+          close(); dropList("pending", o.id); putList("register", upd); changed(); toast("Одобрена — вече е в регистъра");
+          act("Одобрението не мина", async () => { const r = await api("apiApprove", o.id, f); if (r && r.o) { putList("register", r.o); changed(); } });
         };
         $("#rejBtn").onclick = () => { $("#rejBox").hidden = false; $("#dFields").hidden = true; $("#dFoot").hidden = true; F("reason").value = ""; F("reason").focus(); };
         bindAi(o);
@@ -794,8 +855,11 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       if (isAdmin()) {
         foot(`<div class="actions"><button type="button" class="btn danger" id="delBtn">Изтрий</button>${S.ai ? '<button type="button" class="btn" id="aiBtn">Разчети</button>' : ""}</div><div class="actions"><button type="button" class="btn" data-close>Отказ</button><button type="button" class="btn primary" id="saveBtn">Запази</button></div>`);
         bindAi(o);
-        $("#saveBtn").onclick = () => run($("#saveBtn"), "Записвам…", async () => { const f = readForm(); if (f.total == null) throw new Error("Въведи сумата."); await api("apiUpdate", o.id, f); close(); toast("Запазено"); await load(true); });
-        armBtn($("#delBtn"), "Потвърди изтриването", async () => { await api("apiDelete", o.id); close(); toast("Изтрита"); await load(true); });
+        $("#saveBtn").onclick = () => { const f = readForm(); if (f.total == null) return toast("Въведи сумата.");
+          const upd = Object.assign({}, o, f); delete upd.totalEur; if (upd.payment === "Платена") upd.paidDate = upd.paidDate || todayISO(); else if (upd.paidBy && upd.reimbursed !== "Да") { upd.paidBy = ""; upd.reimbursed = ""; }
+          close(); putList("register", upd); changed(); toast("Запазено");
+          act("Промяната не се записа", async () => { const r = await api("apiUpdate", o.id, f); if (r && r.o) { putList("register", r.o); changed(); } }); };
+        armBtn($("#delBtn"), "Потвърди изтриването", async () => { close(); dropList("register", o.id); changed(); toast("Изтрита"); act("Изтриването не мина", () => api("apiDelete", o.id)); });
       } else foot(`<span></span><button type="button" class="btn" data-close>Затвори</button>`);
     } else {
       fill(o, false);
@@ -804,11 +868,13 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       $("#segP").textContent = "Платих я аз";
       if (canEdit) {
         foot(`<button type="button" class="btn danger" id="wdBtn">Оттегли</button><div class="actions"><button type="button" class="btn" data-close>Затвори</button><button type="button" class="btn primary" id="saveBtn">Запази</button></div>`);
-        $("#saveBtn").onclick = () => run($("#saveBtn"), "Записвам…", async () => { await api("apiMine", o.id, "pay", S.draftPaid); close(); toast("Запазено"); await load(true); });
-        armBtn($("#wdBtn"), "Потвърди оттеглянето", async () => { await api("apiMine", o.id, "delete"); close(); toast("Оттеглена"); await load(true); });
+        $("#saveBtn").onclick = () => { const paid = S.draftPaid;
+          close(); putList("mine", Object.assign({}, o, { payment: paid ? "Платена" : "Неплатена", paidBy: paid ? (o.uploadedBy || S.me.name) : "" })); changed(); toast("Запазено");
+          act("Промяната не се записа", async () => { const r = await api("apiMine", o.id, "pay", paid); if (r && r.o) { putList("mine", r.o); changed(); } }); };
+        armBtn($("#wdBtn"), "Потвърди оттеглянето", async () => { close(); dropList("mine", o.id); changed(); toast("Оттеглена"); act("Оттеглянето не мина", () => api("apiMine", o.id, "delete")); });
       } else if (o.status === "Отхвърлена") {
         foot(`<button type="button" class="btn danger" id="wdBtn">Премахни от списъка</button><button type="button" class="btn" data-close>Затвори</button>`);
-        armBtn($("#wdBtn"), "Потвърди", async () => { await api("apiMine", o.id, "delete"); close(); await load(true); });
+        armBtn($("#wdBtn"), "Потвърди", async () => { close(); dropList("mine", o.id); changed(); act("Не се премахна", () => api("apiMine", o.id, "delete")); });
       } else foot(`<span></span><button type="button" class="btn" data-close>Затвори</button>`);
     }
     if (kind !== "mine") $("#segP").textContent = "Платена";
@@ -816,7 +882,8 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   }
   $("#rejBack").onclick = () => { $("#rejBox").hidden = true; $("#dFields").hidden = false; $("#dFoot").hidden = false; };
   $("#rejGo").onclick = () => { const reason = F("reason").value.trim(); if (!reason) { F("reason").focus(); return toast("Напиши причината."); }
-    run($("#rejGo"), "Отхвърлям…", async () => { await api("apiReject", S.drawer.o.id, reason); close(); toast("Отхвърлена"); await load(true); $("#rejGo").disabled = false; $("#rejGo").textContent = "Отхвърли"; }); };
+    const id = S.drawer.o.id; close(); dropList("pending", id); changed(); toast("Отхвърлена");
+    act("Отхвърлянето не мина", () => api("apiReject", id, reason)); };
 
   // ---------- Excel ----------
   $("#exportBtn").onclick = () => {
@@ -850,7 +917,13 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 
   // ---------- start ----------
   if (!TOKEN) { notice("Липсва личният ти линк. Отвори приложението от линка, който ти е изпратил администраторът."); $("#subLine").textContent = ""; }
-  else { load(false); showOutbox(); }
+  else {
+    // Показваме последно видяното веднага, а новото се дозарежда отзад
+    let c = null; try { c = JSON.parse(localStorage.getItem("fakturi_cache") || "null"); } catch (x) {}
+    if (c && c.k === TOKEN && c.d && c.d.me) { apply(c.d); applyRole(); S.shown = true; render(); $("#syncDot").textContent = "Обновявам…"; $("#syncDot").hidden = false; }
+    load(true).then(() => { $("#syncDot").textContent = "Записвам…"; setSync(); });
+    showOutbox();
+  }
   setTimeout(() => { if (!S.me && $("#notice").hidden) notice("Зареждането е бавно. Провери интернета и отвори приложението отново."); }, 25000);
 })();
 </script>
