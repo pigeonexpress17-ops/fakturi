@@ -286,6 +286,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
         <div class="fld"><label for="f_currency">Валута</label><select id="f_currency"><option value="EUR">EUR (€)</option><option value="BGN">Сумата е в лева → в €</option></select></div>
         <div class="fld" id="paidAmtFld" hidden><label for="f_paidAmount">Платено досега (€)</label><input id="f_paidAmount" class="r" inputmode="decimal"></div>
         <div class="fld" id="paidDateFld" hidden><label for="f_paidDate">Платена на</label><input id="f_paidDate" type="date"></div>
+        <div class="fld full"><label for="f_iban">IBAN на доставчика</label><div style="display:flex;gap:6px"><input id="f_iban" autocapitalize="characters" spellcheck="false" style="flex:1;font-family:ui-monospace,monospace"><button type="button" class="btn" id="ibanCopy" title="Копирай IBAN">Копирай</button></div></div>
         <div class="fld full"><label for="f_note">Бележка</label><textarea id="f_note" rows="2"></textarea></div>
       </div>
     </div>
@@ -900,7 +901,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 
   // ---------- drawer form ----------
   const F = k => $("#f_" + k);
-  const TXT = ["supplier", "eik", "number", "date", "due", "note", "paidDate"];
+  const TXT = ["supplier", "eik", "number", "date", "due", "note", "paidDate", "iban"];
   let vatSrc = "total";
   const setV = (k, v) => F(k).value = v == null ? "" : nf.format(v);
   const rate = () => F("novat").checked ? 0 : (+F("rate").value || 20) / 100;
@@ -933,7 +934,31 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   $("#mB").onclick = () => { if (!$("#mB").disabled) setMethod("Банка"); }; $("#mK").onclick = () => { if (!$("#mK").disabled) setMethod("Кеш"); };
   F("paidAmount").addEventListener("blur", () => { const v = parseNum(F("paidAmount").value); if (v != null) setV("paidAmount", v); });
 
+  // Запомнени доставчици: последната одобрена фактура от същия ЕИК/име дава вид разход, начин на плащане и IBAN
+  const supKey = (eik, name) => { const e = String(eik || "").replace(/\D/g, ""); if (e.length >= 9) return "e" + e;
+    const n = String(name || "").toLowerCase().replace(/["'„“”«»]/g, "").replace(/(^|[\s,.])(еоод|оод|еад|ад|ет|eood|ood|ltd|llc|ead)(?=$|[\s,.])/g, " ").replace(/[^a-zа-я0-9]/g, "");
+    return n.length >= 3 ? "n" + n : ""; };
+  function lastSup(eik, name) {
+    const ke = supKey(eik, ""), kn = supKey("", name); if (!ke && !kn) return null;
+    const all = S.register.concat(S.mine || []).filter(o => (ke && supKey(o.eik, "") === ke) || (kn && supKey("", o.supplier) === kn));
+    all.sort((a, b) => String(b.date || b.uploadedAt).localeCompare(String(a.date || a.uploadedAt)));
+    const r = { category: "", method: "", iban: "" };
+    all.forEach(o => { if (!r.category && o.category && o.category !== "Други") r.category = o.category; if (!r.method && !o.paidBy && o.method) r.method = o.method; if (!r.iban && o.iban) r.iban = o.iban; });
+    return all.length ? r : null;
+  }
+  function supPrefill() {
+    if (F("supplier").disabled) return;
+    const r = lastSup(F("eik").value, F("supplier").value); if (!r) return; const got = [];
+    if (F("category").value === "Други" && r.category && S.cats.includes(r.category)) { F("category").value = r.category; got.push("вид разход"); }
+    if (!F("iban").value.trim() && r.iban) { F("iban").value = r.iban; got.push("IBAN"); }
+    if (S.freshForm && r.method && r.method !== S.draftMethod) { setMethod(r.method); got.push("начин на плащане"); }
+    if (got.length) toast("Попълнено от предишни фактури: " + got.join(", "));
+  }
+  F("supplier").addEventListener("change", supPrefill); F("eik").addEventListener("change", supPrefill);
+  F("iban").addEventListener("blur", () => { F("iban").value = F("iban").value.toUpperCase().replace(/\s+/g, ""); });
+  $("#ibanCopy").onclick = async () => { const v = F("iban").value.trim(); if (!v) return toast("Няма IBAN"); try { await navigator.clipboard.writeText(v); toast("IBAN е копиран"); } catch (e) { F("iban").select(); document.execCommand("copy"); toast("IBAN е копиран"); } };
   function fill(o, editable) {
+    S.freshForm = !o.id;
     TXT.forEach(k => F(k).value = o[k] || "");
     F("category").innerHTML = S.cats.map(c => `<option>${esc(c)}</option>`).join(""); F("category").value = S.cats.includes(o.category) ? o.category : "Други";
     F("currency").value = "EUR";
