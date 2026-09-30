@@ -176,7 +176,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
 <div class="wrap">
   <header>
     <div><h1>Регистър фактури</h1><p class="sub" id="subLine">Зареждам…</p></div>
-    <div class="actions"><span class="pill" id="rolePill" hidden></span><span class="pill" id="syncDot" hidden>Записвам…</span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn" id="pkgBtn" type="button" hidden title="Изпраща Excel и файловете за избрания месец (или миналия) на счетоводителя">Към счетоводителя</button><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
+    <div class="actions"><span class="pill" id="rolePill" hidden></span><span class="pill" id="syncDot" hidden>Записвам…</span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn" id="pkgBtn" type="button" hidden title="Изпраща Excel и файловете за избрания месец (или миналия) на счетоводителя">Към счетоводителя</button><button class="btn" id="bankBtn" type="button" hidden title="Качи извлечение от Булбанк Онлайн (CSV) — платените фактури се отбелязват сами">Банково извлечение</button><input type="file" id="bankIn" accept=".csv,text/csv" hidden><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
   </header>
 
   <div class="notice" id="notice" hidden></div>
@@ -368,7 +368,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     $("#upCard").hidden = false; $("#refreshBtn").hidden = false;
     $("#summary").hidden = $("#tabs").hidden = !seesAll();
     $("#exportBtn").hidden = !seesAll();
-    $("#pkgBtn").hidden = !isAdmin();
+    $("#pkgBtn").hidden = !isAdmin(); $("#bankBtn").hidden = !isAdmin();
     $("#upP").textContent = isAdmin() ? "Платена" : "Платих я аз";
     if (!seesAll()) S.view = "mine";
     notice("");
@@ -533,6 +533,35 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     if (!pkgArm) { pkgArm = true; b.textContent = "Изпрати " + monthLabel(ym) + "?"; b.classList.add("primary"); clearTimeout(pkgT); pkgT = setTimeout(reset, 6000); return; }
     clearTimeout(pkgT); b.disabled = true; b.textContent = "Изпращам…";
     try { const r = await api("apiSendPackage", ym); toast(r.msg); } catch (e) { toast(errMsg(e)); } finally { b.disabled = false; reset(); }
+  };
+
+  // ---------- банково извлечение (CSV от Булбанк Онлайн) ----------
+  function parseBankCsv(text) {
+    const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter(l => l.trim());
+    const sep = (lines[0] || "").split(";").length > (lines[0] || "").split(",").length ? ";" : ",";
+    const out = [];
+    lines.slice(1).forEach(l => {
+      const p = l.split(sep); if (p.length < 10) return;
+      const R = p.slice(-7), type = (R[3] || "").trim();
+      if (type && type !== "ДТ") return;
+      const m = (p[1] || "").trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/); if (!m) return;
+      const amount = parseNum(R[0]); if (!amount) return;
+      out.push({ date: `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`, amount, details: p.slice(2, -7).join(sep).trim(), kind: (R[4] || "").trim(), ref: (R[5] || "").trim() });
+    });
+    return out;
+  }
+  $("#bankBtn").onclick = () => $("#bankIn").click();
+  $("#bankIn").onchange = async () => {
+    const f = $("#bankIn").files[0]; $("#bankIn").value = ""; if (!f) return;
+    const b = $("#bankBtn"); b.disabled = true; b.textContent = "Съпоставям…";
+    try {
+      const rows = parseBankCsv(await f.text());
+      if (!rows.length) throw new Error("Не намерих плащания във файла. Свали извлечението от Булбанк Онлайн като CSV.");
+      const r = await api("apiImportBank", rows);
+      toast(`Извлечение: ${r.added} нови плащания. ${r.paid ? r.paid + " фактури са отбелязани като платени." : "Няма нови платени фактури."} Подробности в таблицата, лист „Банка“.`);
+      await load(true, true);
+    } catch (e) { toast(errMsg(e)); }
+    finally { b.disabled = false; b.textContent = "Банково извлечение"; }
   };
 
   const armed = new Set();
