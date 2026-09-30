@@ -48,7 +48,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,5vw,30px);m
 .btn:disabled{opacity:.5;cursor:default}
 .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
-.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .sum{background:var(--paper);padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0;border:0;text-align:left}
 .sum .lbl{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:flex;align-items:center;gap:8px}
 .sum .lbl i{width:8px;height:8px;border-radius:50%;display:inline-block}
@@ -110,6 +110,10 @@ button.sum .val{color:var(--accent)}
 .stamp.unpaid{color:var(--unpaid);background:var(--unpaid-soft)}
 .stamp.late{color:var(--late);background:var(--late-soft)}
 .stamp.pend{color:var(--accent);background:var(--accent-soft)}
+.stamp.part,.seg button[aria-pressed="true"].x{color:var(--accent);background:var(--accent-soft)}
+.seg button[aria-pressed="true"].m{background:var(--accent-soft);color:var(--accent)}
+.mtag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:4px}
+button.sum{cursor:pointer}
 .cat{display:inline-block;font-size:12px;padding:1px 7px;border-radius:4px;background:var(--accent-soft);color:var(--accent);font-weight:500;margin-right:6px}
 .tp{color:var(--paid)} .tu{color:var(--unpaid)} .ta{color:var(--accent)}
 .empty{padding:36px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center}
@@ -182,9 +186,11 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
   <div class="notice" id="notice" hidden></div>
 
   <section class="summary" id="summary" hidden>
-    <div class="sum"><span class="lbl"><i style="background:var(--unpaid)"></i>Неплатени</span><span class="val" id="sU">—</span><span class="cnt" id="cU"></span></div>
-    <div class="sum"><span class="lbl"><i style="background:var(--late)"></i>Просрочени</span><span class="val" id="sL">—</span><span class="cnt" id="cL"></span></div>
-    <div class="sum"><span class="lbl"><i style="background:var(--paid)"></i>Платени</span><span class="val" id="sP">—</span><span class="cnt" id="cP"></span></div>
+    <button class="sum" type="button" data-sf="unpaid|Банка"><span class="lbl"><i style="background:var(--unpaid)"></i>Неплатени — банка</span><span class="val" id="sUB">—</span><span class="cnt" id="cUB"></span></button>
+    <button class="sum" type="button" data-sf="unpaid|Кеш"><span class="lbl"><i style="background:var(--unpaid)"></i>Неплатени — кеш</span><span class="val" id="sUK">—</span><span class="cnt" id="cUK"></span></button>
+    <button class="sum" type="button" data-sf="part|"><span class="lbl"><i style="background:var(--accent)"></i>Частично платени — остават</span><span class="val" id="sX">—</span><span class="cnt" id="cX"></span></button>
+    <button class="sum" type="button" data-sf="paid|Банка"><span class="lbl"><i style="background:var(--paid)"></i>Платени — банка</span><span class="val" id="sPB">—</span><span class="cnt" id="cPB"></span></button>
+    <button class="sum" type="button" data-sf="paid|Кеш"><span class="lbl"><i style="background:var(--paid)"></i>Платени — кеш</span><span class="val" id="sPK">—</span><span class="cnt" id="cPK"></span></button>
     <button class="sum" type="button" id="oweCard"><span class="lbl"><i style="background:var(--accent)"></i>Дължиш на хора</span><span class="val" id="sO">—</span><span class="cnt" id="cO"></span></button>
   </section>
 
@@ -218,8 +224,14 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
     <div class="chips" role="group" aria-label="Статус">
       <button class="chip" data-f="all" aria-pressed="true" type="button">Всички</button>
       <button class="chip" data-f="unpaid" aria-pressed="false" type="button">Неплатени</button>
+      <button class="chip" data-f="part" aria-pressed="false" type="button">Частично</button>
       <button class="chip" data-f="late" aria-pressed="false" type="button">Просрочени</button>
       <button class="chip" data-f="paid" aria-pressed="false" type="button">Платени</button>
+    </div>
+    <div class="chips" role="group" aria-label="Начин на плащане">
+      <button class="chip mchip" data-m="" aria-pressed="true" type="button">Банка и кеш</button>
+      <button class="chip mchip" data-m="Банка" aria-pressed="false" type="button">Банка</button>
+      <button class="chip mchip" data-m="Кеш" aria-pressed="false" type="button">Кеш</button>
     </div>
     <select id="monthSel" aria-label="Месец"></select>
     <select id="catSel" aria-label="Вид разход"></select>
@@ -235,7 +247,8 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
     <div id="dStatus"></div>
     <div id="dFile"></div>
     <div id="dFields">
-      <div class="seg" id="paySeg" style="margin-bottom:12px"><button type="button" class="u" id="segU" aria-pressed="true">Неплатена</button><button type="button" class="p" id="segP" aria-pressed="false">Платена</button></div>
+      <div class="seg" id="paySeg" style="margin-bottom:8px"><button type="button" class="u" id="segU" aria-pressed="true">Неплатена</button><button type="button" class="x" id="segX" aria-pressed="false">Частично</button><button type="button" class="p" id="segP" aria-pressed="false">Платена</button></div>
+      <div class="seg" id="methSeg" style="margin-bottom:12px"><button type="button" class="m" id="mB" aria-pressed="true">Банка</button><button type="button" class="m" id="mK" aria-pressed="false">Кеш</button></div>
       <div class="grid2">
         <div class="fld full"><label for="f_supplier">Доставчик</label><input id="f_supplier"></div>
         <div class="fld full"><label for="f_category">Вид разход</label><select id="f_category"></select></div>
@@ -248,6 +261,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
         <div class="fld"><label for="f_vat">ДДС</label><input id="f_vat" class="r" inputmode="decimal"></div>
         <div class="fld"><label for="f_total">Общо с ДДС</label><input id="f_total" class="r" inputmode="decimal"></div>
         <div class="fld"><label for="f_currency">Валута</label><select id="f_currency"><option value="EUR">EUR (€)</option><option value="BGN">Сумата е в лева → в €</option></select></div>
+        <div class="fld" id="paidAmtFld" hidden><label for="f_paidAmount">Платено досега (€)</label><input id="f_paidAmount" class="r" inputmode="decimal"></div>
         <div class="fld" id="paidDateFld" hidden><label for="f_paidDate">Платена на</label><input id="f_paidDate" type="date"></div>
         <div class="fld full"><label for="f_note">Бележка</label><textarea id="f_note" rows="2"></textarea></div>
       </div>
@@ -272,7 +286,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 (() => {
   const RATE = 1.95583;
   const $ = s => document.querySelector(s);
-  const S = { me: null, cats: [], pending: [], register: [], mine: [], people: [], ai: false, view: "queue", filter: "all", month: "", cat: "", q: "", drawer: null, draftPaid: false, upPaid: false };
+  const S = { me: null, cats: [], pending: [], register: [], mine: [], people: [], ai: false, view: "queue", filter: "all", method: "", draftPay: "Неплатена", draftMethod: "Банка", month: "", cat: "", q: "", drawer: null, draftPaid: false, upPaid: false };
 
   // ---------- helpers ----------
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -288,6 +302,10 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     if (s.includes(",") && s.includes(".")) s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
     else s = s.replace(",", "."); const n = parseFloat(s); return isNaN(n) ? null : r2(n); };
   const isPaid = o => o.payment === "Платена";
+  const isPart = o => o.payment === "Частично";
+  const methodOf = o => o.method === "Кеш" ? "Кеш" : "Банка";
+  const paidE = o => isPaid(o) ? eur(o) : isPart(o) ? Math.min(eur(o), toE(+o.paidAmount || 0, o.currency)) : 0;
+  const dueE = o => r2(eur(o) - paidE(o));
   const isLate = o => !isPaid(o) && o.due && o.due < todayISO();
   const MONTHS = ["Януари","Февруари","Март","Април","Май","Юни","Юли","Август","Септември","Октомври","Ноември","Декември"];
   const monthLabel = ym => { const [y, m] = ym.split("-"); return MONTHS[+m - 1] + " " + y; };
@@ -411,7 +429,9 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     const q = S.q.trim().toLowerCase();
     return S.register.filter(o => {
       if (S.filter === "paid" && !isPaid(o)) return false;
-      if (S.filter === "unpaid" && isPaid(o)) return false;
+      if (S.filter === "unpaid" && (isPaid(o) || isPart(o))) return false;
+      if (S.filter === "part" && !isPart(o)) return false;
+      if (S.method && methodOf(o) !== S.method) return false;
       if (S.filter === "late" && !isLate(o)) return false;
       if (S.month && String(o.date || o.uploadedAt).slice(0, 7) !== S.month) return false;
       if (S.cat && (o.category || "Други") !== S.cat) return false;
@@ -425,11 +445,13 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   function render() {
     if (!S.me) return;
     if (!seesAll()) { $("#toolbar").hidden = true; return renderMine(); }
-    let u = 0, cu = 0, l = 0, cl = 0, p = 0, cp = 0;
-    S.register.forEach(o => { const e = eur(o); if (isPaid(o)) { p += e; cp++; } else { u += e; cu++; if (isLate(o)) { l += e; cl++; } } });
-    $("#sU").textContent = money(r2(u)); $("#cU").textContent = plural(cu);
-    $("#sL").textContent = money(r2(l)); $("#cL").textContent = plural(cl);
-    $("#sP").textContent = money(r2(p)); $("#cP").textContent = plural(cp);
+    const A = { UB: [0, 0], UK: [0, 0], PB: [0, 0], PK: [0, 0], X: [0, 0, 0] };
+    S.register.forEach(o => { const k = methodOf(o) === "Кеш" ? "K" : "B";
+      if (isPaid(o)) { A["P" + k][0] += eur(o); A["P" + k][1]++; }
+      else if (isPart(o)) { A.X[0] += dueE(o); A.X[1]++; A.X[2] += paidE(o); }
+      else { A["U" + k][0] += eur(o); A["U" + k][1]++; } });
+    ["UB", "UK", "PB", "PK"].forEach(k => { $("#s" + k).textContent = money(r2(A[k][0])); $("#c" + k).textContent = plural(A[k][1]); });
+    $("#sX").textContent = money(r2(A.X[0])); $("#cX").textContent = A.X[1] ? plural(A.X[1]) + " · платени " + money(r2(A.X[2])) : "няма";
     const om = owedMap(), names = Object.keys(om).filter(n => om[n].n);
     $("#sO").textContent = money(r2(names.reduce((s, n) => s + om[n].sum, 0)));
     $("#cO").textContent = names.length ? (names.length === 1 ? "на 1 човек" : "на " + names.length + " души") : "никой не чака пари";
@@ -447,7 +469,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     ({ queue: renderQueue, list: renderList, cats: renderCats, owe: renderOwe })[S.view]();
   }
 
-  const payTag = o => isPaid(o) ? (o.paidBy && !isAdmin() && S.me.name === o.paidBy ? '<small class="tp">Платих я аз</small>' : `<small class="tp">Платена${o.paidBy ? " от " + esc(o.paidBy) : ""}</small>`) : '<small class="tu">Неплатена</small>';
+  const payTag = o => isPart(o) ? `<small class="tu">Частично: платени ${money(paidE(o))}</small>` : isPaid(o) ? (o.paidBy && !isAdmin() && S.me.name === o.paidBy ? '<small class="tp">Платих я аз</small>' : `<small class="tp">Платена${o.paidBy ? " от " + esc(o.paidBy) : ""}</small>`) : '<small class="tu">Неплатена</small>';
 
   function renderQueue() {
     const v = $("#view");
@@ -467,22 +489,22 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     if (!S.register.length) { v.innerHTML = `<div class="empty"><b>Още няма одобрени фактури</b><span>Одобрените фактури влизат тук и в Excel.</span></div>`; return; }
     if (!rows.length) { v.innerHTML = `<div class="empty"><b>Нищо не отговаря на филтъра</b><span>Смени статуса, месеца, вида разход или търсенето.</span></div>`; return; }
     v.innerHTML = rows.map(o => { const late = isLate(o);
-      const st = isPaid(o) ? '<span class="stamp paid">Платена</span>' : `<span class="stamp ${late ? "late" : "unpaid"}">${late ? "Просрочена" : "Неплатена"}</span>`;
+      const st = isPaid(o) ? '<span class="stamp paid">Платена</span>' : isPart(o) ? `<span class="stamp ${late ? "late" : "part"}">${late ? "Просрочена" : "Частично"}</span>` : `<span class="stamp ${late ? "late" : "unpaid"}">${late ? "Просрочена" : "Неплатена"}</span>`;
       const owe = o.paidBy ? (o.reimbursed === "Да" ? ` · върнати на ${esc(o.paidBy)}` : ` · <b class="ta" style="display:inline">дължиш на ${esc(o.paidBy)}</b>`) : "";
       return `<button class="row" type="button" data-r="${esc(o.id)}">
         <span class="c-st">${st}</span>
-        <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span><span class="cat">${esc(o.category || "Други")}</span>${o.number ? "№ " + esc(o.number) : ""}${owe}${dupTag(o)}</span></span>
+        <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span><span class="mtag">${methodOf(o)}</span><span class="cat">${esc(o.category || "Други")}</span>${o.number ? "№ " + esc(o.number) : ""}${owe}${dupTag(o)}</span></span>
         <span class="who c-x"><span>от ${esc(o.uploadedBy)}</span></span>
         <span class="date c-dt ${late ? "late" : ""}">${fmtDate(o.date || o.uploadedAt)}</span>
-        <span class="amt c-amt">${money(o.total, o.currency)}</span>
+        <span class="amt c-amt">${money(o.total, o.currency)}${isPart(o) ? `<small class="hint">остават ${money(dueE(o))}</small>` : ""}</span>
       </button>`; }).join("") +
-      `<div class="foot"><span>${plural(rows.length)}</span><span>Неплатени <b class="num">${money(r2(rows.filter(o => !isPaid(o)).reduce((s, o) => s + eur(o), 0)))}</b> · Общо <b class="num">${money(r2(rows.reduce((s, o) => s + eur(o), 0)))}</b></span></div>`;
+      `<div class="foot"><span>${plural(rows.length)}</span><span>Неплатени (остатък) <b class="num">${money(r2(rows.reduce((s, o) => s + dueE(o), 0)))}</b> · Общо <b class="num">${money(r2(rows.reduce((s, o) => s + eur(o), 0)))}</b></span></div>`;
   }
 
   function renderCats() {
     const v = $("#view"), rows = filtered();
     if (!rows.length) { v.innerHTML = `<div class="empty"><b>Няма разходи за показване</b><span>Одобри фактури или смени филтрите.</span></div>`; return; }
-    const m = {}; rows.forEach(o => { const c = o.category || "Други"; m[c] = m[c] || { p: 0, u: 0, n: 0 }; isPaid(o) ? m[c].p += eur(o) : m[c].u += eur(o); m[c].n++; });
+    const m = {}; rows.forEach(o => { const c = o.category || "Други"; m[c] = m[c] || { p: 0, u: 0, n: 0 }; m[c].p += paidE(o); m[c].u += dueE(o); m[c].n++; });
     const arr = Object.entries(m).sort((a, b) => (b[1].p + b[1].u) - (a[1].p + a[1].u));
     const max = Math.max(...arr.map(([, o]) => o.p + o.u), 1), tot = arr.reduce((s, [, o]) => s + o.p + o.u, 0);
     v.innerHTML = `<div class="foot" style="border-top:0"><span><span class="tp">■</span> платено · <span class="tu">■</span> неплатено</span><span class="hint">Натисни ред, за да видиш фактурите</span></div>` +
@@ -512,7 +534,10 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 
   // ---------- nav & filters ----------
   document.querySelectorAll(".tab").forEach(t => t.onclick = () => { S.view = t.dataset.v; render(); });
-  document.querySelectorAll(".chip").forEach(c => c.onclick = () => { S.filter = c.dataset.f; document.querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === c)); render(); });
+  const syncChips = () => { document.querySelectorAll(".chip[data-f]").forEach(x => x.setAttribute("aria-pressed", x.dataset.f === S.filter)); document.querySelectorAll(".chip[data-m]").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === S.method)); };
+  document.querySelectorAll(".chip[data-f]").forEach(c => c.onclick = () => { S.filter = c.dataset.f; syncChips(); render(); });
+  document.querySelectorAll(".chip[data-m]").forEach(c => c.onclick = () => { S.method = c.dataset.m; syncChips(); render(); });
+  document.querySelectorAll(".sum[data-sf]").forEach(c => c.onclick = () => { const [f, m] = c.dataset.sf.split("|"); S.filter = f; S.method = m; S.view = "list"; syncChips(); render(); });
   $("#monthSel").onchange = e => { S.month = e.target.value; render(); };
   $("#catSel").onchange = e => { S.cat = e.target.value; render(); };
   let qT; $("#q").oninput = e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value; render(); }, 150); };
@@ -558,7 +583,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       const rows = parseBankCsv(await f.text());
       if (!rows.length) throw new Error("Не намерих плащания във файла. Свали извлечението от Булбанк Онлайн като CSV.");
       const r = await api("apiImportBank", rows);
-      toast(`Извлечение: ${r.added} нови плащания. ${r.paid ? r.paid + " фактури са отбелязани като платени." : "Няма нови платени фактури."} Подробности в таблицата, лист „Банка“.`);
+      toast(`Извлечение: ${r.added} нови плащания. ${r.paid ? r.paid + " фактури са отбелязани като платени." : "Няма нови платени фактури."}${r.partial ? " " + r.partial + " — частично платени." : ""} Подробности в таблицата, лист „Банка“.`);
       await load(true, true);
     } catch (e) { toast(errMsg(e)); }
     finally { b.disabled = false; b.textContent = "Банково извлечение"; }
@@ -803,8 +828,18 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   };
   F("novat").onchange = F("rate").onchange = () => recalc(vatSrc === "vat" ? "net" : vatSrc);
   ["net", "vat", "total"].forEach(k => F(k).addEventListener("blur", () => { const v = parseNum(F(k).value); if (v != null) setV(k, v); }));
-  function setPaid(p) { S.draftPaid = p; $("#segP").setAttribute("aria-pressed", p); $("#segU").setAttribute("aria-pressed", !p); $("#paidDateFld").hidden = !p; if (p && !F("paidDate").value) F("paidDate").value = todayISO(); }
-  $("#segP").onclick = () => { if (!$("#segP").disabled) setPaid(true); }; $("#segU").onclick = () => { if (!$("#segU").disabled) setPaid(false); };
+  function setPay(v) {
+    S.draftPay = v; S.draftPaid = v === "Платена";
+    $("#segP").setAttribute("aria-pressed", v === "Платена"); $("#segU").setAttribute("aria-pressed", v === "Неплатена"); $("#segX").setAttribute("aria-pressed", v === "Частично");
+    $("#paidDateFld").hidden = v === "Неплатена"; $("#paidAmtFld").hidden = v !== "Частично";
+    if (v !== "Неплатена" && !F("paidDate").value) F("paidDate").value = todayISO();
+  }
+  const setPaid = p => setPay(p ? "Платена" : "Неплатена");
+  function setMethod(m) { S.draftMethod = m; $("#mB").setAttribute("aria-pressed", m === "Банка"); $("#mK").setAttribute("aria-pressed", m === "Кеш"); }
+  $("#segP").onclick = () => { if (!$("#segP").disabled) setPay("Платена"); }; $("#segU").onclick = () => { if (!$("#segU").disabled) setPay("Неплатена"); };
+  $("#segX").onclick = () => { if (!$("#segX").disabled) { setPay("Частично"); F("paidAmount").focus(); } };
+  $("#mB").onclick = () => { if (!$("#mB").disabled) setMethod("Банка"); }; $("#mK").onclick = () => { if (!$("#mK").disabled) setMethod("Кеш"); };
+  F("paidAmount").addEventListener("blur", () => { const v = parseNum(F("paidAmount").value); if (v != null) setV("paidAmount", v); });
 
   function fill(o, editable) {
     TXT.forEach(k => F(k).value = o[k] || "");
@@ -812,17 +847,19 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     F("currency").value = "EUR";
     ["net", "vat", "total"].forEach(k => setV(k, toE(o[k], o.currency)));
     F("novat").checked = o.vatRate === 0; F("rate").value = o.vatRate === 9 ? "9" : "20";
-    setPaid(isPaid(o));
+    setPay(isPart(o) ? "Частично" : isPaid(o) ? "Платена" : "Неплатена"); setMethod(methodOf(o));
+    setV("paidAmount", isPart(o) ? toE(+o.paidAmount || 0, o.currency) : null);
+    $("#segX").hidden = $("#methSeg").hidden = false;
     [...TXT, "category", "currency", "net", "vat", "total", "novat", "rate"].forEach(k => F(k).disabled = !editable);
-    $("#segP").disabled = $("#segU").disabled = !editable;
+    $("#segP").disabled = $("#segU").disabled = $("#segX").disabled = $("#mB").disabled = $("#mK").disabled = F("paidAmount").disabled = !editable;
     vatSrc = "total"; ["net", "vat", "total"].forEach(k => F(k).classList.remove("auto"));
     $("#rateWrap").hidden = F("novat").checked; F("vat").disabled = !editable || F("novat").checked;
   }
   function readForm() {
     const o = {}; TXT.forEach(k => o[k] = F(k).value);
     Object.assign(o, { category: F("category").value, currency: "EUR", net: parseNum(F("net").value), vat: parseNum(F("vat").value), total: parseNum(F("total").value),
-      vatRate: F("novat").checked ? 0 : +F("rate").value, payment: S.draftPaid ? "Платена" : "Неплатена" });
-    if (!S.draftPaid) o.paidDate = "";
+      vatRate: F("novat").checked ? 0 : +F("rate").value, payment: S.draftPay, method: S.draftMethod, paidAmount: S.draftPay === "Частично" ? parseNum(F("paidAmount").value) : null });
+    if (S.draftPay === "Неплатена") o.paidDate = "";
     return o;
   }
   const foot = h => $("#dFoot").innerHTML = h;
@@ -878,8 +915,10 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
           if (d.length && !ok.dataset.armed) { ok.dataset.armed = "1"; ok.textContent = "Одобри въпреки дубликата"; ok.classList.add("danger-solid"); toast("Внимание: прилича на вече качена фактура. Провери отгоре."); return; }
           if (d.length) f.dupNote = true;
           if (f.total == null) return toast("Въведи сумата, преди да одобриш.");
+          if (f.payment === "Частично" && (f.paidAmount == null || f.paidAmount <= 0 || f.paidAmount >= f.total)) return toast("Въведи колко е платено досега — по-малко от общата сума.");
           const upd = Object.assign({}, o, f, { status: "Одобрена" }); delete upd.dupNote; delete upd.totalEur;
           if (upd.payment === "Платена") { upd.paidDate = upd.paidDate || todayISO(); if (upd.paidBy) upd.reimbursed = upd.reimbursed || "Не"; } else { upd.paidBy = ""; upd.reimbursed = ""; }
+          if (upd.payment === "Частично") upd.paidDate = upd.paidDate || todayISO();
           close(); dropList("pending", o.id); putList("register", upd); changed(); toast("Одобрена — вече е в регистъра");
           act("Одобрението не мина", async () => { const r = await api("apiApprove", o.id, f); if (r && r.o) { putList("register", r.o); changed(); } });
         };
@@ -892,6 +931,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
         foot(`<div class="actions"><button type="button" class="btn danger" id="delBtn">Изтрий</button>${S.ai ? '<button type="button" class="btn" id="aiBtn">Разчети</button>' : ""}</div><div class="actions"><button type="button" class="btn" data-close>Отказ</button><button type="button" class="btn primary" id="saveBtn">Запази</button></div>`);
         bindAi(o);
         $("#saveBtn").onclick = () => { const f = readForm(); if (f.total == null) return toast("Въведи сумата.");
+          if (f.payment === "Частично" && (f.paidAmount == null || f.paidAmount <= 0 || f.paidAmount >= f.total)) return toast("Въведи колко е платено досега — по-малко от общата сума.");
           const upd = Object.assign({}, o, f); delete upd.totalEur; if (upd.payment === "Платена") upd.paidDate = upd.paidDate || todayISO(); else if (upd.paidBy && upd.reimbursed !== "Да") { upd.paidBy = ""; upd.reimbursed = ""; }
           close(); putList("register", upd); changed(); toast("Запазено");
           act("Промяната не се записа", async () => { const r = await api("apiUpdate", o.id, f); if (r && r.o) { putList("register", r.o); changed(); } }); };
@@ -901,7 +941,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       fill(o, false);
       const canEdit = o.status === "Чака одобрение";
       $("#segP").disabled = $("#segU").disabled = !canEdit;
-      $("#segP").textContent = "Платих я аз";
+      $("#segP").textContent = "Платих я аз"; $("#segX").hidden = $("#methSeg").hidden = true;
       if (canEdit) {
         foot(`<button type="button" class="btn danger" id="wdBtn">Оттегли</button><div class="actions"><button type="button" class="btn" data-close>Затвори</button><button type="button" class="btn primary" id="saveBtn">Запази</button></div>`);
         $("#saveBtn").onclick = () => { const paid = S.draftPaid;
@@ -927,24 +967,27 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     if (!rows.length) return toast("Няма одобрени фактури в този изглед.");
     if (!window.XLSX) return toast("Excel модулът не се зареди. Обнови страницата.");
     const d = s => s ? new Date(String(s).slice(0, 10) + "T00:00:00") : null;
-    const head = ["Статус", "Вид разход", "Доставчик", "ЕИК", "№ фактура", "Дата", "Падеж", "Без ДДС", "ДДС", "Общо", "Валута", "Общо (EUR)", "Дата на плащане", "Качена от", "Платена лично от", "Парите върнати", "Бележка"];
-    const aoa = [head, ...rows.map(o => [isPaid(o) ? "Платена" : isLate(o) ? "Просрочена" : "Неплатена", o.category || "Други", o.supplier || "", o.eik || "", o.number || "", d(o.date), d(o.due),
-      toE(o.net, o.currency), toE(o.vat, o.currency), toE(o.total, o.currency), "EUR", eur(o), d(o.paidDate), o.uploadedBy || "", o.paidBy || "", o.paidBy ? (o.reimbursed === "Да" ? "Да" : "Не") : "", o.note || ""])];
+    const head = ["Статус", "Вид разход", "Доставчик", "ЕИК", "№ фактура", "Дата", "Падеж", "Без ДДС", "ДДС", "Общо", "Валута", "Общо (EUR)", "Дата на плащане", "Качена от", "Платена лично от", "Парите върнати", "Бележка", "Начин на плащане", "Платено (EUR)", "Остатък (EUR)"];
+    const aoa = [head, ...rows.map(o => [isPaid(o) ? "Платена" : isPart(o) ? "Частично" : isLate(o) ? "Просрочена" : "Неплатена", o.category || "Други", o.supplier || "", o.eik || "", o.number || "", d(o.date), d(o.due),
+      toE(o.net, o.currency), toE(o.vat, o.currency), toE(o.total, o.currency), "EUR", eur(o), d(o.paidDate), o.uploadedBy || "", o.paidBy || "", o.paidBy ? (o.reimbursed === "Да" ? "Да" : "Не") : "", o.note || "", methodOf(o), r2(paidE(o)), dueE(o)])];
     const last = rows.length + 1;
     aoa.push([]);
-    aoa.push(["", "", "Неплатени (EUR)", "", "", "", "", "", "", "", "", { f: `SUMIF(A2:A${last},"<>Платена",L2:L${last})` }]);
-    aoa.push(["", "", "Платени (EUR)", "", "", "", "", "", "", "", "", { f: `SUMIF(A2:A${last},"Платена",L2:L${last})` }]);
+    aoa.push(["", "", "Неплатени (EUR)", "", "", "", "", "", "", "", "", { f: `SUM(T2:T${last})` }]);
+    aoa.push(["", "", "Платени (EUR)", "", "", "", "", "", "", "", "", { f: `SUM(S2:S${last})` }]);
     aoa.push(["", "", "Общо (EUR)", "", "", "", "", "", "", "", "", { f: `SUM(L2:L${last})` }]);
     const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true }), rg = XLSX.utils.decode_range(ws["!ref"]);
-    for (let R = 1; R <= rg.e.r; R++) { [5, 6, 12].forEach(C => { const c = ws[XLSX.utils.encode_cell({ r: R, c: C })]; if (c && c.t === "d") c.z = "dd.mm.yyyy"; }); [7, 8, 9, 11].forEach(C => { const c = ws[XLSX.utils.encode_cell({ r: R, c: C })]; if (c) c.z = "#,##0.00"; }); }
-    ws["!cols"] = [12, 26, 30, 14, 14, 12, 12, 12, 12, 12, 8, 13, 15, 18, 18, 12, 30].map(w => ({ wch: w }));
-    ws["!autofilter"] = { ref: `A1:Q${last}` };
+    for (let R = 1; R <= rg.e.r; R++) { [5, 6, 12].forEach(C => { const c = ws[XLSX.utils.encode_cell({ r: R, c: C })]; if (c && c.t === "d") c.z = "dd.mm.yyyy"; }); [7, 8, 9, 11, 18, 19].forEach(C => { const c = ws[XLSX.utils.encode_cell({ r: R, c: C })]; if (c) c.z = "#,##0.00"; }); }
+    ws["!cols"] = [12, 26, 30, 14, 14, 12, 12, 12, 12, 12, 8, 13, 15, 18, 18, 12, 30, 12, 13, 13].map(w => ({ wch: w }));
+    ws["!autofilter"] = { ref: `A1:T${last}` };
     const cats = [...new Set(rows.map(o => o.category || "Други"))], lr = cats.length + 1;
-    const SI = (r, c) => `SUMIFS('Фактури'!$L$2:$L$${last},'Фактури'!$B$2:$B$${last},A${r},'Фактури'!$A$2:$A$${last},${c})`;
+    const SI = (r, col) => `SUMIFS('Фактури'!$${col}$2:$${col}$${last},'Фактури'!$B$2:$B$${last},A${r})`;
     const aoa2 = [["Вид разход", "Брой", "Платено (EUR)", "Неплатено (EUR)", "Общо (EUR)"]];
-    cats.forEach((c, i) => { const r = i + 2; aoa2.push([c, { f: `COUNTIF('Фактури'!$B$2:$B$${last},A${r})` }, { f: SI(r, '"Платена"') }, { f: SI(r, '"<>Платена"') }, { f: `C${r}+D${r}` }]); });
+    cats.forEach((c, i) => { const r = i + 2; aoa2.push([c, { f: `COUNTIF('Фактури'!$B$2:$B$${last},A${r})` }, { f: SI(r, "S") }, { f: SI(r, "T") }, { f: `C${r}+D${r}` }]); });
     aoa2.push(["Общо", { f: `SUM(B2:B${lr})` }, { f: `SUM(C2:C${lr})` }, { f: `SUM(D2:D${lr})` }, { f: `SUM(E2:E${lr})` }]);
-    const ws2 = XLSX.utils.aoa_to_sheet(aoa2); for (let R = 1; R <= lr; R++) [2, 3, 4].forEach(C => { const c = ws2[XLSX.utils.encode_cell({ r: R, c: C })]; if (c) c.z = "#,##0.00"; });
+    const MS = (m, col) => ({ f: `SUMIFS('Фактури'!$${col}$2:$${col}$${last},'Фактури'!$R$2:$R$${last},"${m}")` });
+    aoa2.push([]); aoa2.push(["Начин на плащане", "", "Платено (EUR)", "Неплатено (EUR)", "Общо (EUR)"]);
+    ["Банка", "Кеш"].forEach((m, i) => { const r = lr + 3 + i; aoa2.push([m, "", MS(m, "S"), MS(m, "T"), { f: `C${r}+D${r}` }]); });
+    const ws2 = XLSX.utils.aoa_to_sheet(aoa2); for (let R = 1; R <= lr + 4; R++) [2, 3, 4].forEach(C => { const c = ws2[XLSX.utils.encode_cell({ r: R, c: C })]; if (c) c.z = "#,##0.00"; });
     ws2["!cols"] = [30, 8, 15, 16, 14].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Фактури"); XLSX.utils.book_append_sheet(wb, ws2, "По разходи");
     try { XLSX.writeFile(wb, `Фактури ${todayISO()}.xlsx`); toast("Excel файлът се изтегля"); }
