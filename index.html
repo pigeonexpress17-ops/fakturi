@@ -247,7 +247,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
         <div class="fld"><label for="f_net">Без ДДС</label><input id="f_net" class="r" inputmode="decimal"></div>
         <div class="fld"><label for="f_vat">ДДС</label><input id="f_vat" class="r" inputmode="decimal"></div>
         <div class="fld"><label for="f_total">Общо с ДДС</label><input id="f_total" class="r" inputmode="decimal"></div>
-        <div class="fld"><label for="f_currency">Валута</label><select id="f_currency"><option value="EUR">EUR (€)</option><option value="BGN">BGN (лв.)</option></select></div>
+        <div class="fld"><label for="f_currency">Валута</label><select id="f_currency"><option value="EUR">EUR (€)</option><option value="BGN">Сумата е в лева → в €</option></select></div>
         <div class="fld" id="paidDateFld" hidden><label for="f_paidDate">Платена на</label><input id="f_paidDate" type="date"></div>
         <div class="fld full"><label for="f_note">Бележка</label><textarea id="f_note" rows="2"></textarea></div>
       </div>
@@ -279,7 +279,9 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   const todayISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
   const fmtDate = iso => iso ? String(iso).slice(0, 10).split("-").reverse().join(".") : "—";
   const nf = new Intl.NumberFormat("bg-BG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const money = (v, cur) => (v == null || isNaN(v)) ? "—" : nf.format(v) + (cur === "BGN" ? " лв." : " €");
+  // Всички суми се показват в евро; стари записи в лева се преобразуват по фиксирания курс
+  const toE = (v, cur) => (v == null || v === "" || isNaN(v)) ? v : (cur === "BGN" ? Math.round(v / 1.95583 * 100) / 100 : +v);
+  const money = (v, cur) => (v == null || v === "" || isNaN(v)) ? "—" : nf.format(toE(v, cur)) + " €";
   const r2 = v => Math.round((+v + Number.EPSILON) * 100) / 100;
   const eur = o => o.totalEur != null ? +o.totalEur : (o.total == null ? 0 : (o.currency === "BGN" ? r2(o.total / RATE) : +o.total));
   const parseNum = s => { if (s == null) return null; s = String(s).replace(/\s/g, "").replace(/[^\d.,-]/g, ""); if (!s) return null;
@@ -472,7 +474,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
         <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span><span class="cat">${esc(o.category || "Други")}</span>${o.number ? "№ " + esc(o.number) : ""}${owe}${dupTag(o)}</span></span>
         <span class="who c-x"><span>от ${esc(o.uploadedBy)}</span></span>
         <span class="date c-dt ${late ? "late" : ""}">${fmtDate(o.date || o.uploadedAt)}</span>
-        <span class="amt c-amt">${money(o.total, o.currency)}${o.currency === "BGN" ? `<small class="hint">≈ ${money(eur(o))}</small>` : ""}</span>
+        <span class="amt c-amt">${money(o.total, o.currency)}</span>
       </button>`; }).join("") +
       `<div class="foot"><span>${plural(rows.length)}</span><span>Неплатени <b class="num">${money(r2(rows.filter(o => !isPaid(o)).reduce((s, o) => s + eur(o), 0)))}</b> · Общо <b class="num">${money(r2(rows.reduce((s, o) => s + eur(o), 0)))}</b></span></div>`;
   }
@@ -765,6 +767,11 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     else { const n = parseNum(F("net").value), v = parseNum(F("vat").value); if (n != null && v != null) setV("total", r2(n + v)); }
   }
   F("net").oninput = () => recalc("net"); F("total").oninput = () => recalc("total"); F("vat").oninput = () => recalc("vat");
+  F("currency").onchange = () => {
+    if (F("currency").value !== "BGN") return;
+    ["net", "vat", "total"].forEach(k => { const v = parseNum(F(k).value); if (v != null) setV(k, r2(v / RATE)); });
+    F("currency").value = "EUR"; toast("Сумите са преобразувани от лева в евро (1 € = 1,95583 лв.)");
+  };
   F("novat").onchange = F("rate").onchange = () => recalc(vatSrc === "vat" ? "net" : vatSrc);
   ["net", "vat", "total"].forEach(k => F(k).addEventListener("blur", () => { const v = parseNum(F(k).value); if (v != null) setV(k, v); }));
   function setPaid(p) { S.draftPaid = p; $("#segP").setAttribute("aria-pressed", p); $("#segU").setAttribute("aria-pressed", !p); $("#paidDateFld").hidden = !p; if (p && !F("paidDate").value) F("paidDate").value = todayISO(); }
@@ -773,8 +780,8 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   function fill(o, editable) {
     TXT.forEach(k => F(k).value = o[k] || "");
     F("category").innerHTML = S.cats.map(c => `<option>${esc(c)}</option>`).join(""); F("category").value = S.cats.includes(o.category) ? o.category : "Други";
-    F("currency").value = o.currency === "BGN" ? "BGN" : "EUR";
-    ["net", "vat", "total"].forEach(k => setV(k, o[k]));
+    F("currency").value = "EUR";
+    ["net", "vat", "total"].forEach(k => setV(k, toE(o[k], o.currency)));
     F("novat").checked = o.vatRate === 0; F("rate").value = o.vatRate === 9 ? "9" : "20";
     setPaid(isPaid(o));
     [...TXT, "category", "currency", "net", "vat", "total", "novat", "rate"].forEach(k => F(k).disabled = !editable);
@@ -784,7 +791,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   }
   function readForm() {
     const o = {}; TXT.forEach(k => o[k] = F(k).value);
-    Object.assign(o, { category: F("category").value, currency: F("currency").value, net: parseNum(F("net").value), vat: parseNum(F("vat").value), total: parseNum(F("total").value),
+    Object.assign(o, { category: F("category").value, currency: "EUR", net: parseNum(F("net").value), vat: parseNum(F("vat").value), total: parseNum(F("total").value),
       vatRate: F("novat").checked ? 0 : +F("rate").value, payment: S.draftPaid ? "Платена" : "Неплатена" });
     if (!S.draftPaid) o.paidDate = "";
     return o;
@@ -893,7 +900,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     const d = s => s ? new Date(String(s).slice(0, 10) + "T00:00:00") : null;
     const head = ["Статус", "Вид разход", "Доставчик", "ЕИК", "№ фактура", "Дата", "Падеж", "Без ДДС", "ДДС", "Общо", "Валута", "Общо (EUR)", "Дата на плащане", "Качена от", "Платена лично от", "Парите върнати", "Бележка"];
     const aoa = [head, ...rows.map(o => [isPaid(o) ? "Платена" : isLate(o) ? "Просрочена" : "Неплатена", o.category || "Други", o.supplier || "", o.eik || "", o.number || "", d(o.date), d(o.due),
-      o.net, o.vat, o.total, o.currency || "EUR", eur(o), d(o.paidDate), o.uploadedBy || "", o.paidBy || "", o.paidBy ? (o.reimbursed === "Да" ? "Да" : "Не") : "", o.note || ""])];
+      toE(o.net, o.currency), toE(o.vat, o.currency), toE(o.total, o.currency), "EUR", eur(o), d(o.paidDate), o.uploadedBy || "", o.paidBy || "", o.paidBy ? (o.reimbursed === "Да" ? "Да" : "Не") : "", o.note || ""])];
     const last = rows.length + 1;
     aoa.push([]);
     aoa.push(["", "", "Неплатени (EUR)", "", "", "", "", "", "", "", "", { f: `SUMIF(A2:A${last},"<>Платена",L2:L${last})` }]);
