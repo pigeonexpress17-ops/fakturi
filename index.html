@@ -154,13 +154,29 @@ button.sum .val{color:var(--accent)}
 .hint{font-size:13px;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:14px;z-index:30;max-width:calc(100% - 32px)}
 .notice{border:1px solid var(--line);background:var(--paper);border-radius:var(--r);padding:16px;color:var(--muted)}
+.bigpick.compact{padding:12px}
+.bigpick.compact small{display:none}
+.tray{display:flex;flex-direction:column;gap:10px}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.th{position:relative;width:72px;height:96px;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden;background:var(--bg);display:grid;place-items:center;font-size:12px;color:var(--muted);font-family:var(--f-num)}
+.th img{width:100%;height:100%;object-fit:cover}
+.th .pg{position:absolute;left:4px;bottom:4px;background:var(--ink);color:var(--paper);font-size:11px;border-radius:4px;padding:0 5px}
+.th .rm{position:absolute;right:2px;top:2px;width:26px;height:26px;border-radius:13px;border:0;background:rgba(0,0,0,.62);color:#fff;font-size:17px;line-height:1;padding:0}
+.outbox{border:1px dashed var(--unpaid);background:var(--unpaid-soft);color:var(--unpaid);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+.dup{color:var(--late);font-weight:600;font-size:12px}
+.dupbox{color:var(--late)}
+details.hist{border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0}
+.hrow{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.hrow:first-child{border-top:0}
+@media (max-width:420px){.hrow{grid-template-columns:1fr;gap:2px}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div><h1>Регистър фактури</h1><p class="sub" id="subLine">Зареждам…</p></div>
-    <div class="actions"><span class="pill" id="rolePill" hidden></span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
+    <div class="actions"><span class="pill" id="rolePill" hidden></span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn" id="pkgBtn" type="button" hidden title="Изпраща Excel и файловете за избрания месец (или миналия) на счетоводителя">Към счетоводителя</button><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
   </header>
 
   <div class="notice" id="notice" hidden></div>
@@ -180,8 +196,14 @@ button.sum .val{color:var(--accent)}
       <div class="fld"><label for="upSupplier">Доставчик (по желание)</label><input id="upSupplier" placeholder="напр. Шел, ЧЕЗ…"></div>
       <div class="fld full"><label for="upNote">Бележка (по желание)</label><input id="upNote" placeholder="напр. гориво за бус СВ 1234"></div>
     </div>
-    <div class="bigpick"><strong>Снимай фактурата или избери файл</strong><small>Снимка от телефона (всякакъв размер) или PDF до 10 MB · може няколко наведнъж</small>
+    <div class="bigpick" id="pick"><strong id="pickTitle">Снимай фактурата или избери файл</strong><small>Снимка от телефона или PDF до 20 MB · фактура на няколко снимки се събира в един файл</small>
       <input type="file" id="fileIn" accept="image/*,application/pdf" multiple aria-label="Избери файл"></div>
+    <div class="tray" id="tray" hidden>
+      <div class="thumbs" id="thumbs"></div>
+      <small class="hint" id="trayHint"></small>
+      <div class="actions" id="trayActions"></div>
+    </div>
+    <div class="outbox" id="outbox" hidden><span id="outboxText"></span><button type="button" class="btn" id="outboxRetry">Опитай сега</button></div>
     <div class="progress" id="progress"></div>
   </section>
 
@@ -235,6 +257,7 @@ button.sum .val{color:var(--accent)}
       <textarea id="f_reason" rows="2"></textarea>
       <div class="actions"><button type="button" class="btn" id="rejBack">Назад</button><button type="button" class="btn danger-solid" id="rejGo">Отхвърли</button></div>
     </div>
+    <div id="dHist"></div>
     <div class="dfoot" id="dFoot"></div>
   </form>
 </div>
@@ -273,22 +296,42 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   const notice = m => { $("#notice").textContent = m; $("#notice").hidden = !m; };
   const api = async (fn, ...args) => {
     let r;
+    const soft = m => { const er = new Error(m); er.retry = true; return er; };
     try { r = await fetch(EXEC_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ fn, k: TOKEN, args }) }); }
-    catch (e) { throw new Error("Няма връзка с интернет. Опитай пак."); }
-    let j; try { j = await r.json(); } catch (e) { throw new Error("Сървърът не отговори правилно. Опитай пак след малко."); }
+    catch (e) { throw soft("Няма връзка с интернет."); }
+    let j; try { j = await r.json(); } catch (e) { throw soft("Сървърът не отговори. Ще опитам пак след малко."); }
     if (!j.ok) throw new Error(j.error || "Нещо се обърка.");
     return j.data;
   };
   const errMsg = e => (e && e.message ? e.message : "Нещо се обърка.").replace(/^Error:\s*/, "").replace(/^Exception:\s*/, "");
 
   // ---------- data ----------
+  function apply(d) {
+    Object.assign(S, { me: d.me, cats: d.cats, ai: d.ai, aiError: d.aiError || "", accountant: !!d.accountant, pending: d.pending || [], register: d.register || [], mine: d.mine || [], people: d.people || [] });
+    dupIndex = null;
+  }
   async function load(quiet) {
     try {
       const d = await api("apiInit");
-      Object.assign(S, { me: d.me, cats: d.cats, ai: d.ai, pending: d.pending || [], register: d.register || [], mine: d.mine || [], people: d.people || [] });
-      if (!quiet) applyRole();
+      apply(d);
+      try { localStorage.setItem("fakturi_cache", JSON.stringify({ at: Date.now(), k: TOKEN, d })); } catch (e) {}
+      if (!quiet || !S.shown) { applyRole(); S.shown = true; }
+      if (S.offline) { S.offline = false; notice(""); }
+      if (isAdmin() && S.aiError) notice("Claude не разчита фактурите: " + S.aiError + " Провери ключа в таблицата (лист „Настройки“, клетка B5).");
       render();
-    } catch (e) { notice(errMsg(e)); $("#subLine").textContent = ""; }
+      flushOutbox();
+    } catch (e) {
+      if (e.retry && !S.me) {
+        let c = null; try { c = JSON.parse(localStorage.getItem("fakturi_cache") || "null"); } catch (x) {}
+        if (c && c.k === TOKEN) {
+          apply(c.d); applyRole(); S.shown = true; S.offline = true; render();
+          notice("Няма интернет. Показвам данните от " + new Date(c.at).toLocaleString("bg-BG", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + ". Снимките, които качиш сега, ще се изпратят сами, щом има връзка.");
+          showOutbox();
+          return;
+        }
+      }
+      if (!S.me) { notice(errMsg(e)); $("#subLine").textContent = ""; } else if (!quiet) toast(errMsg(e));
+    }
   }
 
   function applyRole() {
@@ -300,9 +343,42 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     $("#upCard").hidden = false; $("#refreshBtn").hidden = false;
     $("#summary").hidden = $("#tabs").hidden = !seesAll();
     $("#exportBtn").hidden = !seesAll();
+    $("#pkgBtn").hidden = !isAdmin();
     $("#upP").textContent = isAdmin() ? "Платена" : "Платих я аз";
     if (!seesAll()) S.view = "mine";
     notice("");
+  }
+
+  // ---------- дубликати ----------
+  const normS = s => String(s || "").toLowerCase().replace(/["'„“”«»]/g, "").replace(/(^|[\s,.])(еоод|оод|еад|ад|ет|eood|ood|ltd|llc)(?=$|[\s,.])/g, " ").replace(/[^a-zа-я0-9]/g, "");
+  const normN = s => String(s || "").replace(/\D/g, "").replace(/^0+/, "");
+  function dupKeys(o) {
+    const k = [], n = normN(o.number), eik = normN(o.eik), sup = normS(o.supplier);
+    if (n.length >= 3) { if (eik) k.push("e|" + eik + "|" + n); if (sup) k.push("s|" + sup + "|" + n); }
+    if (sup && o.date && o.total != null && o.total !== "") k.push("d|" + sup + "|" + String(o.date).slice(0, 10) + "|" + Number(o.total).toFixed(2));
+    return k;
+  }
+  let dupIndex = null;
+  function buildDup() {
+    dupIndex = new Map();
+    S.pending.map(o => [o, "pending"]).concat(S.register.map(o => [o, "register"])).forEach(([o, where]) => dupKeys(o).forEach(k => { if (!dupIndex.has(k)) dupIndex.set(k, []); dupIndex.get(k).push({ o, where }); }));
+  }
+  function dupsOf(o) {
+    if (!dupIndex) buildDup();
+    const seen = new Set(), out = [];
+    dupKeys(o).forEach(k => (dupIndex.get(k) || []).forEach(x => { if (x.o.id !== o.id && !seen.has(x.o.id)) { seen.add(x.o.id); out.push(x); } }));
+    return out;
+  }
+  const dupTag = o => seesAll() && dupsOf(o).length ? ' · <span class="dup">Възможен дубликат</span>' : "";
+  const aiTag = o => o.ai === "чака" ? ' · <span class="hint">Claude разчита…</span>' : o.ai === "грешка" ? ' · <span class="hint">не се разчете</span>' : "";
+
+  // ---------- история ----------
+  async function loadHist(id, box) {
+    box.innerHTML = '<div class="hint" style="padding:8px 0">Зареждам…</div>';
+    try {
+      const h = await api("apiHistory", id);
+      box.innerHTML = h.length ? h.slice().reverse().map(x => `<div class="hrow"><span class="num hint">${esc(x.at)}</span><span><b>${esc(x.action)}</b> · ${esc(x.who)}${x.details ? `<br><span class="hint">${esc(x.details)}</span>` : ""}</span></div>`).join("") : '<div class="hint" style="padding:8px 0">Няма записи.</div>';
+    } catch (e) { box.innerHTML = `<div class="hint" style="padding:8px 0">${esc(errMsg(e))}</div>`; }
   }
 
   // ---------- render ----------
@@ -354,7 +430,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     v.innerHTML = S.pending.slice().sort((a, b) => String(a.uploadedAt).localeCompare(String(b.uploadedAt))).map(o => `
       <button class="row" type="button" data-p="${esc(o.id)}">
         <span class="c-st"><span class="stamp pend">Чака</span></span>
-        <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span>${esc(o.note || (o.number ? "№ " + o.number : ""))}</span></span>
+        <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span>${esc(o.note || (o.number ? "№ " + o.number : ""))}${o.pages > 1 ? " · " + o.pages + " стр." : ""}${aiTag(o)}${dupTag(o)}</span></span>
         <span class="who c-x"><span>от ${esc(o.uploadedBy)}</span></span>
         <span class="date c-dt">${fmtDate(o.uploadedAt)}</span>
         <span class="amt c-amt">${money(o.total, o.currency)}${payTag(o)}</span>
@@ -370,7 +446,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       const owe = o.paidBy ? (o.reimbursed === "Да" ? ` · върнати на ${esc(o.paidBy)}` : ` · <b class="ta" style="display:inline">дължиш на ${esc(o.paidBy)}</b>`) : "";
       return `<button class="row" type="button" data-r="${esc(o.id)}">
         <span class="c-st">${st}</span>
-        <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span><span class="cat">${esc(o.category || "Други")}</span>${o.number ? "№ " + esc(o.number) : ""}${owe}</span></span>
+        <span class="who c-who"><b>${esc(o.supplier || "Без доставчик")}</b><span><span class="cat">${esc(o.category || "Други")}</span>${o.number ? "№ " + esc(o.number) : ""}${owe}${dupTag(o)}</span></span>
         <span class="who c-x"><span>от ${esc(o.uploadedBy)}</span></span>
         <span class="date c-dt ${late ? "late" : ""}">${fmtDate(o.date || o.uploadedAt)}</span>
         <span class="amt c-amt">${money(o.total, o.currency)}${o.currency === "BGN" ? `<small class="hint">≈ ${money(eur(o))}</small>` : ""}</span>
@@ -404,7 +480,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
       const st = o.status === "Одобрена" ? '<span class="stamp paid">Одобрена</span>' : o.status === "Отхвърлена" ? '<span class="stamp late">Отхвърлена</span>' : '<span class="stamp pend">Чака</span>';
       const pay = isPaid(o) ? (o.status === "Одобрена" ? (o.reimbursed === "Да" ? '<small class="tp">Парите са ти върнати</small>' : '<small class="tu">Чака връщане на парите</small>') : '<small class="tp">Платих я аз</small>') : '<small class="tu">Неплатена</small>';
       return `<button class="row" type="button" data-m="${esc(o.id)}"><span class="c-st">${st}</span>
-        <span class="who c-who"><b>${esc(o.supplier || "Фактура")}</b><span>${o.status === "Отхвърлена" && o.reason ? '<span class="err">Причина: ' + esc(o.reason) + "</span>" : esc(o.note || "")}</span></span>
+        <span class="who c-who"><b>${esc(o.supplier || "Фактура")}</b><span>${o.status === "Отхвърлена" && o.reason ? '<span class="err">Причина: ' + esc(o.reason) + "</span>" : esc(o.note || "")}${o.status === "Чака одобрение" ? aiTag(o) : ""}</span></span>
         <span class="c-x"></span><span class="date c-dt">${fmtDate(o.uploadedAt)}</span>
         <span class="amt c-amt">${money(o.total, o.currency)}${pay}</span></button>`; }).join("");
   }
@@ -416,8 +492,23 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   $("#catSel").onchange = e => { S.cat = e.target.value; render(); };
   let qT; $("#q").oninput = e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value; render(); }, 150); };
   $("#oweCard").onclick = () => { S.view = "owe"; render(); };
-  $("#refreshBtn").onclick = () => load(true).then(() => toast("Обновено"));
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && S.me) load(true); });
+  $("#refreshBtn").onclick = () => load(true).then(() => toast(S.offline ? "Още няма интернет" : "Обновено"));
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { if (S.me) load(true); flushOutbox(); } });
+  window.addEventListener("online", () => { flushOutbox(); if (S.me) load(true); });
+  setInterval(() => { if (navigator.onLine !== false) flushOutbox(); }, 30000);
+
+  // ---------- пакет за счетоводителя ----------
+  const prevMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  let pkgArm = false, pkgT;
+  $("#pkgBtn").onclick = async () => {
+    const b = $("#pkgBtn");
+    if (!S.accountant) return toast("Първо въведи имейла на счетоводителя в таблицата: лист „Настройки“, клетка B8.");
+    const ym = S.month || prevMonth();
+    const reset = () => { pkgArm = false; b.textContent = "Към счетоводителя"; b.classList.remove("primary"); };
+    if (!pkgArm) { pkgArm = true; b.textContent = "Изпрати " + monthLabel(ym) + "?"; b.classList.add("primary"); clearTimeout(pkgT); pkgT = setTimeout(reset, 6000); return; }
+    clearTimeout(pkgT); b.disabled = true; b.textContent = "Изпращам…";
+    try { const r = await api("apiSendPackage", ym); toast(r.msg); } catch (e) { toast(errMsg(e)); } finally { b.disabled = false; reset(); }
+  };
 
   const armed = new Set();
   $("#view").addEventListener("click", async e => {
@@ -438,35 +529,147 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   // ---------- upload ----------
   const setUp = p => { S.upPaid = p; $("#upP").setAttribute("aria-pressed", p); $("#upU").setAttribute("aria-pressed", !p); };
   $("#upP").onclick = () => setUp(true); $("#upU").onclick = () => setUp(false);
-  $("#fileIn").onchange = async e => {
-    const files = [...e.target.files]; e.target.value = "";
-    if (!files.length) return;
-    const meta = { paid: S.upPaid, total: parseNum($("#upTotal").value), supplier: $("#upSupplier").value.trim(), note: $("#upNote").value.trim() };
-    const prog = $("#progress"); let ok = 0;
-    for (const f of files) {
-      const line = document.createElement("span"); line.innerHTML = `<i class="dot"></i>Качвам „${esc(f.name)}“…`; prog.prepend(line);
-      try {
-        const p = await prep(f);
-        const r = await api("apiUpload", { b64: p.b64, type: p.type, ...meta });
-        line.innerHTML = `<span class="ok">✓</span> „${esc(f.name)}“ ${isAdmin() ? "е в регистъра" : "е изпратена за одобрение"}`; ok++;
-        if (S.ai) api("apiExtract", r.id).then(() => load(true)).catch(() => {});
-      } catch (err) { line.innerHTML = `<span class="err">✕ „${esc(f.name)}“: ${esc(errMsg(err))}</span>`; }
-    }
-    if (ok) { $("#upTotal").value = ""; $("#upSupplier").value = ""; $("#upNote").value = ""; setUp(false); await load(true); }
-    setTimeout(() => { [...prog.children].slice(5).forEach(x => x.remove()); }, 100);
-  };
-  async function prep(f) {
-    const toB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
-    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
-      if (f.size > 10e6) throw new Error("PDF-ът е над 10 MB.");
-      return { b64: await toB64(f), type: "application/pdf" };
-    }
+  const toB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  const toDataUrl = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(blob); });
+  const isPdfFile = f => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+  async function toJpeg(f, max, q) {
     let bmp; try { bmp = await createImageBitmap(f, { imageOrientation: "from-image" }); } catch (e) { throw new Error("Снимката не може да се отвори. Опитай JPG."); }
-    const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
     const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
     const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(bmp, 0, 0, cv.width, cv.height);
-    const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.85));
-    return { b64: await toB64(blob), type: "image/jpeg" };
+    const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", q));
+    return { blob, w: cv.width, h: cv.height };
+  }
+  async function prep(f) {
+    if (isPdfFile(f)) {
+      if (f.size > 20e6) throw new Error("PDF-ът е над 20 MB.");
+      return { b64: await toB64(f), type: "application/pdf", pages: 1 };
+    }
+    const { blob } = await toJpeg(f, 2400, 0.85);
+    return { b64: await toB64(blob), type: "image/jpeg", pages: 1 };
+  }
+  let jspdfReady = null;
+  function loadJsPdf() {
+    if (jspdfReady) return jspdfReady;
+    jspdfReady = new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"; s.onload = () => res(window.jspdf); s.onerror = () => rej(new Error("Модулът за PDF не се зареди. Провери интернета.")); document.head.appendChild(s); });
+    jspdfReady.catch(() => jspdfReady = null);
+    return jspdfReady;
+  }
+  // Няколко снимки → един PDF, всяка снимка е страница
+  async function mergeImages(files) {
+    const { jsPDF } = await loadJsPdf();
+    let doc = null;
+    for (const f of files) {
+      const { blob, w, h } = await toJpeg(f, 2000, 0.8);
+      const pw = 595, ph = Math.round(595 * h / w), orient = ph >= pw ? "portrait" : "landscape";
+      if (!doc) doc = new jsPDF({ unit: "pt", format: [pw, ph], orientation: orient, compress: true });
+      else doc.addPage([pw, ph], orient);
+      doc.addImage(await toDataUrl(blob), "JPEG", 0, 0, pw, ph);
+    }
+    return { b64: await toB64(doc.output("blob")), type: "application/pdf", pages: files.length };
+  }
+
+  // Тава: избраните снимки чакат, докато решиш как да се изпратят
+  const tray = [];
+  $("#fileIn").onchange = e => {
+    const files = [...e.target.files]; e.target.value = "";
+    files.forEach(f => tray.push({ file: f, isPdf: isPdfFile(f), url: /^image\//.test(f.type) ? URL.createObjectURL(f) : "" }));
+    renderTray();
+  };
+  function renderTray() {
+    $("#tray").hidden = !tray.length;
+    $("#pick").classList.toggle("compact", tray.length > 0);
+    $("#pickTitle").textContent = tray.length ? "+ Добави още снимка или файл" : "Снимай фактурата или избери файл";
+    $("#thumbs").innerHTML = tray.map((t, i) => `<div class="th">${t.url ? `<img src="${t.url}" alt="">` : "<span>PDF</span>"}<span class="pg">${i + 1}</span><button type="button" class="rm" data-rm="${i}" aria-label="Махни">×</button></div>`).join("");
+    const imgs = tray.filter(t => !t.isPdf).length, pdfs = tray.length - imgs;
+    let h = "";
+    if (tray.length === 1) h = `<button type="button" class="btn primary" data-send="one">Изпрати</button>`;
+    else if (tray.length > 1) {
+      if (imgs > 1) h += `<button type="button" class="btn primary" data-send="merge">Изпрати като 1 фактура (${imgs} снимки)</button>`;
+      h += `<button type="button" class="btn${imgs > 1 ? "" : " primary"}" data-send="split">Изпрати като ${tray.length} отделни</button>`;
+    }
+    if (tray.length) h += `<button type="button" class="btn" data-send="clear">Изчисти</button>`;
+    $("#trayActions").innerHTML = h;
+    const hint = [];
+    if (imgs > 1) hint.push("Една фактура на няколко снимки ли е? Избери „1 фактура“ и снимките стават страници на един файл.");
+    if (imgs > 1 && pdfs) hint.push("PDF файловете се изпращат отделно.");
+    if (tray.length > 1) hint.push("Сумата отгоре се записва само когато изпращаш една фактура.");
+    $("#trayHint").textContent = hint.join(" ");
+  }
+  function progLine(key, html) {
+    const prog = $("#progress");
+    let el = prog.querySelector(`[data-key="${key}"]`);
+    if (!el) { el = document.createElement("span"); el.dataset.key = key; prog.prepend(el); [...prog.children].slice(6).forEach(x => x.remove()); }
+    el.innerHTML = html;
+    return el;
+  }
+  $("#tray").addEventListener("click", async e => {
+    const rm = e.target.closest("[data-rm]");
+    if (rm) { const t = tray.splice(+rm.dataset.rm, 1)[0]; if (t && t.url) URL.revokeObjectURL(t.url); return renderTray(); }
+    const b = e.target.closest("[data-send]"); if (!b) return;
+    const mode = b.dataset.send;
+    const items = tray.splice(0);
+    if (mode === "clear") { items.forEach(t => t.url && URL.revokeObjectURL(t.url)); return renderTray(); }
+    renderTray();
+    const groups = mode === "merge" ? [items.filter(t => !t.isPdf)].concat(items.filter(t => t.isPdf).map(t => [t])) : items.map(t => [t]);
+    const single = groups.length === 1;
+    const meta = { paid: S.upPaid, supplier: $("#upSupplier").value.trim(), note: $("#upNote").value.trim(), total: single ? parseNum($("#upTotal").value) : null };
+    $("#upTotal").value = ""; $("#upSupplier").value = ""; $("#upNote").value = ""; setUp(false);
+    for (const g of groups) {
+      const label = g.length > 1 ? `${g.length} снимки (1 фактура)` : g[0].file.name;
+      const cid = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+      const line = progLine(cid, `<i class="dot"></i>Подготвям „${esc(label)}“…`);
+      try {
+        const payload = g.length > 1 ? await mergeImages(g.map(t => t.file)) : await prep(g[0].file);
+        await DB.put({ clientId: cid, label, meta, payload, tries: 0, at: Date.now() });
+        line.innerHTML = `<i class="dot"></i>Изпращам „${esc(label)}“…`;
+      } catch (err) { line.innerHTML = `<span class="err">✕ „${esc(label)}“: ${esc(errMsg(err))}</span>`; }
+      g.forEach(t => t.url && URL.revokeObjectURL(t.url));
+    }
+    flushOutbox();
+  });
+
+  // ---------- опашка: изпраща, когато има интернет ----------
+  const DB = (() => {
+    let p = null; const mem = new Map();
+    const open = () => p || (p = new Promise((res, rej) => { const r = indexedDB.open("fakturi", 1); r.onupgradeneeded = () => r.result.createObjectStore("outbox", { keyPath: "clientId" }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("outbox", mode); const rq = fn(t.objectStore("outbox")); t.oncomplete = () => res(rq ? rq.result : undefined); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+    return {
+      all: async () => { try { return (await tx("readonly", st => st.getAll())) || []; } catch (e) { return [...mem.values()]; } },
+      put: async v => { try { await tx("readwrite", st => st.put(v)); } catch (e) { mem.set(v.clientId, v); } },
+      del: async id => { try { await tx("readwrite", st => st.delete(id)); } catch (e) {} mem.delete(id); }
+    };
+  })();
+  async function showOutbox() {
+    const n = (await DB.all()).length;
+    $("#outbox").hidden = !n;
+    $("#outboxText").textContent = n === 1 ? "1 фактура чака интернет. Ще се изпрати сама, когато има връзка." : n + " фактури чакат интернет. Ще се изпратят сами, когато има връзка.";
+  }
+  $("#outboxRetry").onclick = () => flushOutbox();
+  let flushing = false;
+  async function flushOutbox() {
+    if (flushing || !TOKEN) return;
+    flushing = true; let sent = 0;
+    try {
+      const items = (await DB.all()).sort((a, b) => (a.at || 0) - (b.at || 0));
+      for (const it of items) {
+        const line = progLine(it.clientId, `<i class="dot"></i>Изпращам „${esc(it.label)}“…`);
+        try {
+          const r = await api("apiUpload", Object.assign({}, it.payload, it.meta, { clientId: it.clientId, offline: (it.tries || 0) > 0 }));
+          await DB.del(it.clientId); sent++;
+          line.innerHTML = `<span class="ok">✓</span> „${esc(it.label)}“ ${isAdmin() ? "е в регистъра" : "е изпратена за одобрение"}`;
+          if (S.ai && r && r.id && !r.repeat) api("apiExtract", r.id).then(() => load(true)).catch(() => {});
+        } catch (err) {
+          if (err.retry) { it.tries = (it.tries || 0) + 1; await DB.put(it); line.innerHTML = `<span class="tu">…</span> „${esc(it.label)}“ чака интернет`; break; }
+          await DB.del(it.clientId);
+          line.innerHTML = `<span class="err">✕ „${esc(it.label)}“: ${esc(errMsg(err))}</span>`;
+        }
+      }
+    } finally {
+      flushing = false;
+      await showOutbox();
+      if (sent) load(true);
+    }
   }
 
   // ---------- file preview ----------
@@ -544,6 +747,16 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
   }
   async function run(btn, busy, fn) { const t = btn.textContent; btn.disabled = true; btn.textContent = busy; try { await fn(); } catch (err) { toast(errMsg(err)); btn.disabled = false; btn.textContent = t; } }
 
+  function bindAi(o) {
+    const b = $("#aiBtn"); if (!b) return;
+    b.onclick = () => run(b, "Разчитам…", async () => {
+      const r = await api("apiExtract", o.id);
+      if (r && r.fields) { fill(Object.assign({}, r.fields, { payment: S.draftPaid ? "Платена" : "Неплатена" }), true); toast("Празните полета са попълнени. Провери ги."); }
+      else toast(r && r.skipped ? "Няма Claude ключ в таблицата." : "Не успях да разчета фактурата.");
+      b.disabled = false; b.textContent = "Разчети";
+    });
+  }
+
   function openDoc(o, kind) {
     if (!o) return;
     S.drawer = { o, kind };
@@ -553,21 +766,34 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
     let st = `<b>${esc(o.status || "Чака одобрение")}</b><span>Качена от ${esc(o.uploadedBy || S.me.name)} на ${fmtDate(o.uploadedAt)}</span>`;
     if (o.status === "Отхвърлена" && o.reason) st += `<span>Причина: ${esc(o.reason)}</span>`;
     if (o.paidBy && kind !== "mine") st += `<span><b>${esc(o.paidBy)} я е платил сам</b>${o.reimbursed === "Да" ? " — парите са му върнати." : " — сумата се води като дълг към него."}</span>`;
+    if (o.pages > 1) st += `<span>${o.pages} страници в един файл</span>`;
+    if (kind !== "mine" && seesAll()) {
+      const d = dupsOf(o);
+      if (d.length) st += `<span class="dupbox"><b>Възможен дубликат:</b> ${d.slice(0, 3).map(x => `${esc(x.o.supplier || "—")}${x.o.number ? " № " + esc(x.o.number) : ""}, ${fmtDate(x.o.date || x.o.uploadedAt)}, ${money(x.o.total, x.o.currency)} (${x.where === "pending" ? "чака одобрение" : isPaid(x.o) ? "в регистъра, платена" : "в регистъра, неплатена"})`).join("; ")}</span>`;
+    }
     $("#dStatus").innerHTML = `<div class="status ${cls}">${st}</div>`;
+    $("#dHist").innerHTML = '<details class="hist" id="histD"><summary>История на промените</summary><div id="histBox"></div></details>';
+    $("#histD").addEventListener("toggle", () => { const box = $("#histBox"); if ($("#histD").open && !box.dataset.done) { box.dataset.done = "1"; loadHist(o.id, box); } });
     preview(o.id);
 
     if (kind === "pending") {
       fill(o, isAdmin());
       if (isAdmin()) {
         foot(`<div class="actions"><button type="button" class="btn danger" id="rejBtn">Отхвърли</button>${S.ai ? '<button type="button" class="btn" id="aiBtn">Разчети</button>' : ""}</div><button type="button" class="btn primary" id="okBtn">Одобри</button>`);
-        $("#okBtn").onclick = () => run($("#okBtn"), "Одобрявам…", async () => { await api("apiApprove", o.id, readForm()); close(); toast("Одобрена — вече е в регистъра"); await load(true); });
+        $("#okBtn").onclick = () => {
+          const ok = $("#okBtn"), f = readForm(), d = dupsOf(Object.assign({}, o, f));
+          if (d.length && !ok.dataset.armed) { ok.dataset.armed = "1"; ok.textContent = "Одобри въпреки дубликата"; ok.classList.add("danger-solid"); toast("Внимание: прилича на вече качена фактура. Провери отгоре."); return; }
+          if (d.length) f.dupNote = true;
+          run(ok, "Одобрявам…", async () => { await api("apiApprove", o.id, f); close(); toast("Одобрена — вече е в регистъра"); await load(true); });
+        };
         $("#rejBtn").onclick = () => { $("#rejBox").hidden = false; $("#dFields").hidden = true; $("#dFoot").hidden = true; F("reason").value = ""; F("reason").focus(); };
-        if ($("#aiBtn")) $("#aiBtn").onclick = () => run($("#aiBtn"), "Разчитам…", async () => { const r = await api("apiExtract", o.id); if (r && r.fields) { fill({ ...r.fields, payment: S.draftPaid ? "Платена" : "Неплатена" }, true); toast("Полетата са попълнени — провери ги."); } else toast("Не успях да разчета фактурата."); $("#aiBtn").disabled = false; $("#aiBtn").textContent = "Разчети"; });
+        bindAi(o);
       } else foot(`<span></span><button type="button" class="btn" data-close>Затвори</button>`);
     } else if (kind === "register") {
       fill(o, isAdmin());
       if (isAdmin()) {
-        foot(`<button type="button" class="btn danger" id="delBtn">Изтрий</button><div class="actions"><button type="button" class="btn" data-close>Отказ</button><button type="button" class="btn primary" id="saveBtn">Запази</button></div>`);
+        foot(`<div class="actions"><button type="button" class="btn danger" id="delBtn">Изтрий</button>${S.ai ? '<button type="button" class="btn" id="aiBtn">Разчети</button>' : ""}</div><div class="actions"><button type="button" class="btn" data-close>Отказ</button><button type="button" class="btn primary" id="saveBtn">Запази</button></div>`);
+        bindAi(o);
         $("#saveBtn").onclick = () => run($("#saveBtn"), "Записвам…", async () => { const f = readForm(); if (f.total == null) throw new Error("Въведи сумата."); await api("apiUpdate", o.id, f); close(); toast("Запазено"); await load(true); });
         armBtn($("#delBtn"), "Потвърди изтриването", async () => { await api("apiDelete", o.id); close(); toast("Изтрита"); await load(true); });
       } else foot(`<span></span><button type="button" class="btn" data-close>Затвори</button>`);
@@ -624,7 +850,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 
   // ---------- start ----------
   if (!TOKEN) { notice("Липсва личният ти линк. Отвори приложението от линка, който ти е изпратил администраторът."); $("#subLine").textContent = ""; }
-  else load(false);
+  else { load(false); showOutbox(); }
   setTimeout(() => { if (!S.me && $("#notice").hidden) notice("Зареждането е бавно. Провери интернета и отвори приложението отново."); }, 25000);
 })();
 </script>
