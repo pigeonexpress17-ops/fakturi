@@ -39,6 +39,7 @@ button{cursor:pointer}
 header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
 h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,5vw,30px);margin:0;letter-spacing:-.01em}
 .sub{color:var(--muted);margin:4px 0 0;font-size:14px}
+.firm{margin:0 0 2px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent,#2446a8)}
 .pill{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line-strong);border-radius:999px;padding:3px 10px;white-space:nowrap}
 .btn{border:1px solid var(--line-strong);background:var(--paper);border-radius:8px;padding:10px 14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
 .btn:hover{border-color:var(--ink)}
@@ -195,7 +196,7 @@ details.hist summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0
 <body>
 <div class="wrap">
   <header>
-    <div><h1>Регистър фактури</h1><p class="sub" id="subLine">Зареждам…</p></div>
+    <div><p class="firm" id="firmLine" hidden></p><h1>Регистър фактури</h1><p class="sub" id="subLine">Зареждам…</p></div>
     <div class="actions"><span class="pill" id="rolePill" hidden></span><span class="pill" id="syncDot" hidden>Записвам…</span><button class="btn" id="refreshBtn" type="button" hidden>Обнови</button><button class="btn" id="pkgBtn" type="button" hidden title="Изпраща Excel и файловете за избрания месец (или миналия) на счетоводителя">Към счетоводителя</button><button class="btn" id="bankBtn" type="button" hidden title="Качи извлечение от Булбанк Онлайн (CSV) — платените фактури се отбелязват сами">Банково извлечение</button><input type="file" id="bankIn" accept=".csv,text/csv" hidden><button class="btn primary" id="exportBtn" type="button" hidden>Изтегли Excel</button></div>
   </header>
 
@@ -371,6 +372,7 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catc
 
   // ---------- data ----------
   function apply(d) {
+    if (d.company) { $("#firmLine").textContent = d.company; $("#firmLine").hidden = false; document.title = "Фактури · " + d.company; }
     Object.assign(S, { me: d.me, cats: d.cats, ai: d.ai, aiError: d.aiError || "", accountant: !!d.accountant, pending: d.pending || [], register: d.register || [], mine: d.mine || [], people: d.people || [], kasa: d.kasa || [] });
     dupIndex = null;
   }
